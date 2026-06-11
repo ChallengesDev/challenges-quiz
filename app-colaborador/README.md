@@ -1,15 +1,17 @@
-# Aplicativo do Colaborador (app-colaborador) - Challenges Quiz
+# app_colaborador
 
-Este é o diretório do **Aplicativo do Colaborador** do projeto Challenges Quiz.
+A new Flutter project.
 
-## O que será desenvolvido aqui?
-Esta será a aplicação principal de ponta (client) com a qual os colaboradores interagem no dia a dia. As principais funcionalidades serão:
-- Autenticação e perfil do colaborador (incluindo progresso, nível e conquistas).
-- Realização de quizzes e desafios de forma interativa.
-- Visualização de rankings e tabelas de classificação (Leaderboards) interativas (seja geral, por equipe ou departamento).
-- Central de recompensas e resgate de pontos (caso aplicável).
-- Histórico de participação e desempenho em quizzes anteriores.
+## Getting Started
 
-## Tecnologias propostas (a definir/confirmar)
-- React Native ou Flutter (se for aplicativo mobile nativo).
-- React (SPA/PWA) ou Next.js (se for aplicação web responsiva/mobile-first).
+This project is a starting point for a Flutter application.
+
+A few resources to get you started if this is your first Flutter project:
+
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.

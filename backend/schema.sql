@@ -115,7 +115,8 @@ create table public.sessoes (
     iniciado_em timestamptz not null default now(),
     finalizado_em timestamptz,
     pontuacao_total integer not null default 0,
-    concluido boolean not null default false
+    concluido boolean not null default false,
+    score_integridade integer not null default 100
 );
 
 -- ==========================================
@@ -444,3 +445,29 @@ create policy "Sistema e usuários podem adicionar conquistas desbloqueadas"
 create policy "Usuários podem visualizar ranking da própria empresa"
     on public.rankings for select
     using (empresa_id = public.get_user_empresa_id());
+
+-- ==========================================
+-- 15. TABELA ocorrencias_fraude
+-- ==========================================
+create table public.ocorrencias_fraude (
+    id uuid default gen_random_uuid() primary key,
+    usuario_id uuid not null references public.usuarios(id) on delete cascade,
+    sessao_id uuid references public.sessoes(id) on delete cascade,
+    tipo_ocorrencia text not null, -- 'saida_tela', 'clique_ultrarrapido', 'desvio_olhar'
+    detalhes text,
+    criado_em timestamptz not null default now()
+);
+
+alter table public.ocorrencias_fraude enable row level security;
+
+create policy "Usuários podem visualizar suas próprias ocorrências de fraude"
+    on public.ocorrencias_fraude for select
+    using (usuario_id = auth.uid());
+
+create policy "Usuários podem registrar suas próprias ocorrências de fraude"
+    on public.ocorrencias_fraude for insert
+    with check (usuario_id = auth.uid());
+
+create policy "Admins e Gestores podem gerenciar todas as ocorrências de fraude"
+    on public.ocorrencias_fraude for all
+    using (public.get_user_nivel_permissao() in ('gestor', 'admin'));
