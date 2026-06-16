@@ -9,8 +9,14 @@ import {
   AlertTriangle,
   Clock,
   Award,
-  X
+  X,
+  Download,
+  Upload,
+  Sparkles
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 interface Category {
   id: string;
@@ -45,6 +51,21 @@ export const ContentManagement: React.FC = () => {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  
+  // Excel Import States
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
+  // AI Question Generation States
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiGenerating, setAIGenerating] = useState(false);
+  const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([]);
+  const [aiStage, setAIStage] = useState<'form' | 'review'>('form');
+  const [aiForm, setAIForm] = useState({
+    tema: '',
+    quantidade: 5,
+    dificuldade: 'medio',
+    contexto: ''
+  });
 
   // Form States
   const [newCategory, setNewCategory] = useState({ nome: '', descricao: '' });
@@ -286,6 +307,291 @@ export const ContentManagement: React.FC = () => {
         resposta_correta: 'A'
       });
       setMessage({ type: 'success', text: '[Modo de Teste] Pergunta simulada com sucesso no desafio.' });
+    }
+  };
+
+  const downloadTemplate = () => {
+    const templateData = [
+      {
+        pergunta: 'Qual o principal objetivo da LGPD?',
+        alternativa_a: 'Garantir a privacidade e proteção de dados pessoais dos cidadãos.',
+        alternativa_b: 'Aumentar a venda de produtos e serviços na internet.',
+        alternativa_c: 'Controlar o uso de redes sociais nas empresas.',
+        alternativa_d: 'Fiscalizar a velocidade da internet residencial.',
+        resposta_correta: 'A',
+        dificuldade: 'medio',
+        tempo_limite: 300,
+        pontuacao: 100
+      },
+      {
+        pergunta: 'Qual dessas práticas ajuda a prevenir ataques de Phishing?',
+        alternativa_a: 'Compartilhar senhas corporativas apenas com colegas do mesmo time.',
+        alternativa_b: 'Desconfiar de links recebidos por e-mails suspeitos e verificar o remetente.',
+        alternativa_c: 'Clicar em todos os anexos para verificar se há vírus.',
+        alternativa_d: 'Responder aos e-mails solicitando dados bancários imediatamente.',
+        resposta_correta: 'B',
+        dificuldade: 'facil',
+        tempo_limite: 120,
+        pontuacao: 80
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Perguntas');
+    XLSX.writeFile(workbook, 'template_perguntas_quiz.xlsx');
+  };
+
+  const handleImportPlanilha = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportErrors([]);
+    setMessage(null);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawJson = XLSX.utils.sheet_to_json<any>(ws);
+
+        if (rawJson.length === 0) {
+          setMessage({ type: 'error', text: 'Planilha vazia ou com formato inválido.' });
+          return;
+        }
+
+        const errors: string[] = [];
+        const validQuestions: any[] = [];
+        let difficultyToUpdate: string | undefined = undefined;
+        let timeLimitToUpdate: number | undefined = undefined;
+        let scoreToUpdate: number | undefined = undefined;
+
+        rawJson.forEach((row: any, index: number) => {
+          const rowNum = index + 2;
+
+          const texto = row.pergunta || row.texto || row.Pergunta || '';
+          const altA = row.alternativa_a || row.Alternativa_A || row.alternativa_A || '';
+          const altB = row.alternativa_b || row.Alternativa_B || row.alternativa_B || '';
+          const altC = row.alternativa_c || row.Alternativa_C || row.alternativa_C || '';
+          const altD = row.alternativa_d || row.Alternativa_D || row.alternativa_D || '';
+          const resp = row.resposta_correta || row.Resposta_Correta || row.resposta || '';
+          const dif = row.dificuldade || row.Dificuldade || '';
+          const tempo = row.tempo_limite || row.Tempo_Limite || row.tempo || '';
+          const pts = row.pontuacao || row.Pontuacao || row.pontos || '';
+
+          const rowErrors: string[] = [];
+
+          if (!texto.toString().trim()) {
+            rowErrors.push('A pergunta está vazia.');
+          }
+          if (!altA.toString().trim()) {
+            rowErrors.push('Alternativa A está vazia.');
+          }
+          if (!altB.toString().trim()) {
+            rowErrors.push('Alternativa B está vazia.');
+          }
+          if (!altC.toString().trim()) {
+            rowErrors.push('Alternativa C está vazia.');
+          }
+          if (!altD.toString().trim()) {
+            rowErrors.push('Alternativa D está vazia.');
+          }
+
+          const respUpper = resp.toString().trim().toUpperCase();
+          if (!respUpper || !['A', 'B', 'C', 'D'].includes(respUpper)) {
+            rowErrors.push(`Resposta correta "${resp}" é inválida. Deve ser A, B, C ou D.`);
+          }
+
+          let parsedTempo: number | undefined = undefined;
+          if (tempo !== undefined && tempo !== '') {
+            parsedTempo = parseInt(tempo);
+            if (isNaN(parsedTempo) || parsedTempo <= 0) {
+              rowErrors.push(`Tempo limite "${tempo}" é inválido. Deve ser um número inteiro de segundos positivo.`);
+              parsedTempo = undefined;
+            }
+          }
+
+          let parsedPts: number | undefined = undefined;
+          if (pts !== undefined && pts !== '') {
+            parsedPts = parseInt(pts);
+            if (isNaN(parsedPts) || parsedPts < 0) {
+              rowErrors.push(`Pontuação "${pts}" é inválida. Deve ser um número inteiro positivo.`);
+              parsedPts = undefined;
+            }
+          }
+
+          let cleanDif = dif.toString().trim().toLowerCase();
+          if (cleanDif) {
+            cleanDif = cleanDif.replace('fácil', 'facil').replace('médio', 'medio').replace('difícil', 'dificil');
+            if (!['facil', 'medio', 'dificil'].includes(cleanDif)) {
+              rowErrors.push(`Dificuldade "${dif}" é inválida. Deve ser facil, medio ou dificil.`);
+              cleanDif = '';
+            }
+          }
+
+          if (rowErrors.length > 0) {
+            errors.push(`Linha ${rowNum}: ${rowErrors.join(' | ')}`);
+          } else {
+            validQuestions.push({
+              texto: texto.toString().trim(),
+              alternativa_a: altA.toString().trim(),
+              alternativa_b: altB.toString().trim(),
+              alternativa_c: altC.toString().trim(),
+              alternativa_d: altD.toString().trim(),
+              resposta_correta: respUpper
+            });
+
+            if (cleanDif && !difficultyToUpdate) {
+              difficultyToUpdate = cleanDif;
+            }
+            if (parsedTempo !== undefined && timeLimitToUpdate === undefined) {
+              timeLimitToUpdate = parsedTempo;
+            }
+            if (parsedPts !== undefined && scoreToUpdate === undefined) {
+              scoreToUpdate = parsedPts;
+            }
+          }
+        });
+
+        if (errors.length > 0) {
+          setImportErrors(errors);
+        }
+
+        if (validQuestions.length === 0) {
+          setMessage({ type: 'error', text: 'Nenhuma pergunta válida encontrada na planilha para importar.' });
+          return;
+        }
+
+        const response = await fetch(`${API_URL}/api/desafios/${newQuestion.desafio_id}/perguntas/bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            perguntas: validQuestions,
+            dificuldade: difficultyToUpdate || null,
+            tempo_limite: timeLimitToUpdate || null,
+            pontuacao: scoreToUpdate || null
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Falha ao importar perguntas no backend.');
+        }
+
+        const resData = await response.json();
+        
+        loadContentData();
+
+        if (errors.length > 0) {
+          setMessage({ 
+            type: 'success', 
+            text: `Importação concluída parcialmente! ${resData.success_count} perguntas importadas com sucesso. Verifique o relatório de erros abaixo para as linhas com problema.` 
+          });
+        } else {
+          setMessage({ 
+            type: 'success', 
+            text: `Sucesso! Todas as ${resData.success_count} perguntas foram importadas com sucesso.` 
+          });
+        }
+
+      } catch (err: any) {
+        console.error('Erro na importação de perguntas:', err);
+        setMessage({ 
+          type: 'error', 
+          text: `Erro ao conectar com o backend: ${err.message || 'Verifique se o servidor FastAPI está ativo em http://127.0.0.1:8000'}` 
+        });
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  const handleGenerateWithAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiForm.tema || aiForm.quantidade <= 0) return;
+
+    setAIStage('form');
+    setAIGenerating(true);
+    setImportErrors([]);
+
+    try {
+      const response = await fetch(`${API_URL}/api/gerar-perguntas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tema: aiForm.tema,
+          quantidade: aiForm.quantidade,
+          dificuldade: aiForm.dificuldade,
+          contexto: aiForm.contexto || null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao gerar perguntas com IA.');
+      }
+
+      const data = await response.json();
+      const mapped = data.map((q: any) => ({
+        pergunta: q.pergunta || '',
+        alternativa_a: q.alternativa_a || '',
+        alternativa_b: q.alternativa_b || '',
+        alternativa_c: q.alternativa_c || '',
+        alternativa_d: q.alternativa_d || '',
+        resposta_correta: (q.resposta_correta || 'A').toUpperCase() as 'A' | 'B' | 'C' | 'D',
+        dificuldade: q.dificuldade || aiForm.dificuldade
+      }));
+
+      setGeneratedQuestions(mapped);
+      setAIStage('review');
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ type: 'error', text: `Erro na geração por IA: ${err.message || 'Verifique se a API está online.'}` });
+    } finally {
+      setAIGenerating(false);
+    }
+  };
+
+  const handleSaveAllAI = async () => {
+    if (generatedQuestions.length === 0) return;
+
+    setAIGenerating(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/desafios/${newQuestion.desafio_id}/perguntas/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          perguntas: generatedQuestions.map(q => ({
+            texto: q.pergunta,
+            alternativa_a: q.alternativa_a,
+            alternativa_b: q.alternativa_b,
+            alternativa_c: q.alternativa_c,
+            alternativa_d: q.alternativa_d,
+            resposta_correta: q.resposta_correta
+          })),
+          dificuldade: generatedQuestions[0]?.dificuldade || null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao salvar perguntas geradas.');
+      }
+
+      const resData = await response.json();
+      
+      loadContentData();
+      setShowAIModal(false);
+      setMessage({
+        type: 'success',
+        text: `Sucesso! Foram geradas e salvas ${resData.success_count} perguntas com Inteligência Artificial.`
+      });
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ type: 'error', text: `Erro ao salvar perguntas: ${err.message}` });
+    } finally {
+      setAIGenerating(false);
     }
   };
 
@@ -599,13 +905,39 @@ export const ContentManagement: React.FC = () => {
                         <span>{ch.pontuacao} XP</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setNewQuestion({ ...newQuestion, desafio_id: ch.id })}
-                      className="btn btn-secondary"
-                      style={{ padding: '4px 8px', fontSize: '11px' }}
-                    >
-                      + Pergunta
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <button
+                        onClick={() => setNewQuestion({ ...newQuestion, desafio_id: ch.id })}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 8px', fontSize: '11px' }}
+                        type="button"
+                      >
+                        + Pergunta
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNewQuestion({ ...newQuestion, desafio_id: ch.id });
+                          setAIStage('form');
+                          setAIForm({ tema: '', quantidade: 5, dificuldade: 'medio', contexto: '' });
+                          setGeneratedQuestions([]);
+                          setShowAIModal(true);
+                        }}
+                        className="btn btn-primary"
+                        style={{ 
+                          padding: '4px 8px', 
+                          fontSize: '11px', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px',
+                          background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                        type="button"
+                      >
+                        <span>✨ Gerar Perguntas com IA</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -620,7 +952,7 @@ export const ContentManagement: React.FC = () => {
             </h3>
 
             {newQuestion.desafio_id ? (
-              <form onSubmit={handleAddQuestion} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <>
                 <div style={{
                   padding: '8px 12px',
                   background: 'rgba(99, 102, 241, 0.05)',
@@ -628,10 +960,105 @@ export const ContentManagement: React.FC = () => {
                   borderRadius: 'var(--radius-sm)',
                   fontSize: '12px',
                   color: 'var(--text-main)',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  marginBottom: '16px'
                 }}>
                   Vinculada ao desafio: {challenges.find(c => c.id === newQuestion.desafio_id)?.titulo}
                 </div>
+
+                {/* Importação por Planilha */}
+                <div style={{
+                  padding: '16px',
+                  background: 'rgba(255, 255, 255, 0.01)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-white)', marginBottom: '4px' }}>
+                    Importação via Planilha
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    Baixe o template padrão, preencha as perguntas e envie o arquivo.
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={downloadTemplate}
+                      className="btn btn-secondary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 12px', border: '1px solid var(--border-color)', cursor: 'pointer' }}
+                      type="button"
+                    >
+                      <Download size={14} />
+                      <span>Baixar Template</span>
+                    </button>
+                    <label
+                      className="btn btn-secondary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 12px', cursor: 'pointer', border: '1px solid var(--border-color)' }}
+                    >
+                      <Upload size={14} />
+                      <span>Importar Planilha</span>
+                      <input
+                        type="file"
+                        accept=".xlsx, .xls, .csv"
+                        onChange={handleImportPlanilha}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    <button
+                      onClick={() => {
+                        if (!newQuestion.desafio_id) {
+                          setMessage({ type: 'error', text: 'Selecione ou crie um desafio antes de gerar perguntas.' });
+                          return;
+                        }
+                        setAIStage('form');
+                        setAIForm({ tema: '', quantidade: 5, dificuldade: 'medio', contexto: '' });
+                        setGeneratedQuestions([]);
+                        setImportErrors([]);
+                        setShowAIModal(true);
+                      }}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 12px', cursor: 'pointer', border: 'none', background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))', color: '#fff', fontWeight: 600 }}
+                      type="button"
+                    >
+                      <Sparkles size={14} />
+                      <span>Gerar com IA</span>
+                    </button>
+                  </div>
+
+                  {importErrors.length > 0 && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '10px 12px',
+                      backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                      border: '1px solid rgba(239, 68, 68, 0.15)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--status-error)',
+                      fontSize: '12px'
+                    }}>
+                      <div style={{ fontWeight: 600, marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Erros encontrados ({importErrors.length}):</span>
+                        <button 
+                          onClick={() => setImportErrors([])} 
+                          style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '10px', textDecoration: 'underline' }}
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                      <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {importErrors.map((err, i) => (
+                          <div key={i} style={{ fontFamily: 'monospace', fontSize: '11px' }}>• {err}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0', gap: '12px' }}>
+                  <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)' }}></div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Ou adicionar manualmente</span>
+                  <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)' }}></div>
+                </div>
+
+                <form onSubmit={handleAddQuestion} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
                 <div>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Texto da Pergunta</label>
@@ -707,6 +1134,7 @@ export const ContentManagement: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </>
             ) : (
               <div style={{
                 textAlign: 'center',
@@ -835,6 +1263,311 @@ export const ContentManagement: React.FC = () => {
                 Vincule insígnias (conquistas) específicas a campanhas de longa duração. Ao cadastrar conquistas com critérios de tempo limite no painel, elas geram mais competitividade sadia entre os departamentos.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showAIModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(5, 7, 15, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div className="card animate-fade-in" style={{
+            width: '100%',
+            maxWidth: aiStage === 'review' ? '800px' : '500px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '32px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), var(--shadow-glow)',
+            border: '1px solid var(--border-color)',
+            background: '#0f1322'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 600, color: 'var(--text-white)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={20} color="var(--color-primary)" />
+                <span>{aiStage === 'review' ? 'Revisar Perguntas da IA' : 'Gerar Perguntas com IA'}</span>
+              </h3>
+              <button 
+                onClick={() => setShowAIModal(false)}
+                disabled={aiGenerating}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            {aiGenerating ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: '16px' }}>
+                <div className="animate-spin" style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  border: '3px solid rgba(99, 102, 241, 0.1)',
+                  borderTopColor: 'var(--color-primary)'
+                }}></div>
+                <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                  {aiStage === 'review' ? 'Salvando perguntas no banco de dados...' : 'Gemini AI está elaborando as perguntas...'}
+                </span>
+              </div>
+            ) : aiStage === 'form' ? (
+              <form onSubmit={handleGenerateWithAI} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Tema do Quiz</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Ex: Prevenção a Engenharia Social ou Direitos na LGPD"
+                    value={aiForm.tema}
+                    onChange={(e) => setAIForm({ ...aiForm, tema: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Quantidade</label>
+                    <select
+                      value={aiForm.quantidade}
+                      onChange={(e) => setAIForm({ ...aiForm, quantidade: parseInt(e.target.value) || 5 })}
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={15}>15</option>
+                      <option value={20}>20</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Dificuldade</label>
+                    <select
+                      value={aiForm.dificuldade}
+                      onChange={(e) => setAIForm({ ...aiForm, dificuldade: e.target.value as any })}
+                    >
+                      <option value="facil">Fácil</option>
+                      <option value="medio">Médio</option>
+                      <option value="dificil">Difícil</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Contexto Adicional (Opcional)</label>
+                  <textarea
+                    className="input"
+                    placeholder="Ex: Focar na atuação do DPO e regras de consentimento. Evitar termos muito jurídicos."
+                    value={aiForm.contexto}
+                    onChange={(e) => setAIForm({ ...aiForm, contexto: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setShowAIModal(false)}
+                    style={{ border: '1px solid var(--border-color)' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button type="submit" className="btn btn-primary">Gerar Perguntas</button>
+                </div>
+              </form>
+            ) : (
+              // Stage: Review
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div style={{ 
+                  overflowY: 'auto', 
+                  flex: 1, 
+                  paddingRight: '8px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '20px',
+                  marginBottom: '24px'
+                }}>
+                  {generatedQuestions.map((q, qIdx) => (
+                    <div key={qIdx} style={{
+                      padding: '20px',
+                      background: 'rgba(255, 255, 255, 0.01)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-sm)',
+                      position: 'relative'
+                    }}>
+                      {/* Delete button */}
+                      <button
+                        onClick={() => {
+                          const updated = [...generatedQuestions];
+                          updated.splice(qIdx, 1);
+                          setGeneratedQuestions(updated);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '16px',
+                          right: '16px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--status-error)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '12px'
+                        }}
+                        title="Excluir Pergunta"
+                      >
+                        <X size={16} />
+                        <span>Remover</span>
+                      </button>
+
+                      {/* Question Text */}
+                      <div style={{ marginBottom: '16px', paddingRight: '80px' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+                          Pergunta {qIdx + 1}
+                        </label>
+                        <input
+                          type="text"
+                          className="input"
+                          value={q.pergunta}
+                          onChange={(e) => {
+                            const updated = [...generatedQuestions];
+                            updated[qIdx].pergunta = e.target.value;
+                            setGeneratedQuestions(updated);
+                          }}
+                          style={{ fontWeight: 600 }}
+                        />
+                      </div>
+
+                      {/* Alternatives */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                        <div>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Alternativa A</label>
+                          <input
+                            type="text"
+                            className="input"
+                            value={q.alternativa_a}
+                            onChange={(e) => {
+                              const updated = [...generatedQuestions];
+                              updated[qIdx].alternativa_a = e.target.value;
+                              setGeneratedQuestions(updated);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Alternativa B</label>
+                          <input
+                            type="text"
+                            className="input"
+                            value={q.alternativa_b}
+                            onChange={(e) => {
+                              const updated = [...generatedQuestions];
+                              updated[qIdx].alternativa_b = e.target.value;
+                              setGeneratedQuestions(updated);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Alternativa C</label>
+                          <input
+                            type="text"
+                            className="input"
+                            value={q.alternativa_c}
+                            onChange={(e) => {
+                              const updated = [...generatedQuestions];
+                              updated[qIdx].alternativa_c = e.target.value;
+                              setGeneratedQuestions(updated);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Alternativa D</label>
+                          <input
+                            type="text"
+                            className="input"
+                            value={q.alternativa_d}
+                            onChange={(e) => {
+                              const updated = [...generatedQuestions];
+                              updated[qIdx].alternativa_d = e.target.value;
+                              setGeneratedQuestions(updated);
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Correct Answer & Difficulty */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Resposta Correta</label>
+                          <select
+                            value={q.resposta_correta}
+                            onChange={(e) => {
+                              const updated = [...generatedQuestions];
+                              updated[qIdx].resposta_correta = e.target.value as any;
+                              setGeneratedQuestions(updated);
+                            }}
+                          >
+                            <option value="A">Alternativa A</option>
+                            <option value="B">Alternativa B</option>
+                            <option value="C">Alternativa C</option>
+                            <option value="D">Alternativa D</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Dificuldade</label>
+                          <select
+                            value={q.dificuldade}
+                            onChange={(e) => {
+                              const updated = [...generatedQuestions];
+                              updated[qIdx].dificuldade = e.target.value as any;
+                              setGeneratedQuestions(updated);
+                            }}
+                          >
+                            <option value="facil">Fácil</option>
+                            <option value="medio">Médio</option>
+                            <option value="dificil">Difícil</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    Total: <strong>{generatedQuestions.length}</strong> perguntas para salvar
+                  </span>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => setAIStage('form')}
+                      style={{ border: '1px solid var(--border-color)' }}
+                    >
+                      Voltar
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn btn-primary" 
+                      onClick={handleSaveAllAI}
+                      disabled={generatedQuestions.length === 0}
+                    >
+                      Salvar todas
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

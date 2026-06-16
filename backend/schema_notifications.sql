@@ -89,16 +89,29 @@ create policy "Usuários atualizam leitura de suas notificações"
 -- TRIGGERS E FUNÇÕES DE AUTOMAÇÃO
 -- ==========================================
 
--- 1. Trigger para propagar notificações para os usuários finais
+-- 1. Trigger para definir enviado_em antes de inserir/atualizar
+create or replace function public.handle_set_enviado_em()
+returns trigger as $$
+begin
+  if NEW.status = 'enviada' and (TG_OP = 'INSERT' or OLD.status <> 'enviada') then
+    if NEW.enviado_em is null then
+      NEW.enviado_em := now();
+    end if;
+  end if;
+  return NEW;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_set_enviado_em on public.notificacoes;
+create trigger tr_set_enviado_em
+  before insert or update of status on public.notificacoes
+  for each row execute procedure public.handle_set_enviado_em();
+
+-- Trigger para propagar notificações para os usuários finais após inserir/atualizar
 create or replace function public.handle_propagate_notificacao()
 returns trigger as $$
 begin
   if NEW.status = 'enviada' and (TG_OP = 'INSERT' or OLD.status <> 'enviada') then
-    -- Se a notificação foi enviada agora, definir enviado_em
-    if NEW.enviado_em is null then
-      NEW.enviado_em := now();
-    end if;
-
     -- Propagar conforme o tipo de destinatário
     if NEW.destinatario_tipo = 'todos' then
       insert into public.usuario_notificacoes (usuario_id, notificacao_id, lida, criado_em)
@@ -117,13 +130,13 @@ begin
       values (NEW.destinatario_id, NEW.id, false, now());
     end if;
   end if;
-  return NEW;
+  return null;
 end;
 $$ language plpgsql security definer;
 
 drop trigger if exists tr_propagate_notificacao on public.notificacoes;
 create trigger tr_propagate_notificacao
-  before insert or update of status on public.notificacoes
+  after insert or update of status on public.notificacoes
   for each row execute procedure public.handle_propagate_notificacao();
 
 -- 2. Trigger para criar configurações padrão de notificação ao cadastrar nova empresa
