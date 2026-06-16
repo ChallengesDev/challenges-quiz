@@ -19,7 +19,9 @@ import {
   ToggleRight,
   TrendingUp,
   Award,
-  BookOpen
+  BookOpen,
+  Trash2,
+  Edit
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -84,6 +86,20 @@ export default function App() {
   const [parsedUsers, setParsedUsers] = useState<any[]>([]);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState('');
   const [uploadEmpresaId, setUploadEmpresaId] = useState('');
+
+  // Edit & Delete States
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [editCompName, setEditCompName] = useState('');
+  const [editCompPlano, setEditCompPlano] = useState('premium');
+  
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserCargo, setEditUserCargo] = useState('');
+  const [editUserPerm, setEditUserPerm] = useState<'colaborador' | 'gestor' | 'admin'>('colaborador');
+  const [editUserDept, setEditUserDept] = useState('');
+
+  const [confirmDeleteCompany, setConfirmDeleteCompany] = useState<Company | null>(null);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     // Escuta estado de sessão
@@ -398,6 +414,113 @@ export default function App() {
       setTimeout(clearMessages, 4000);
     } catch (err: any) {
       setErrorMsg(err.message);
+    }
+  };
+
+  // Update Company
+  const handleUpdateCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCompany) return;
+    setLoading(true);
+    clearMessages();
+    try {
+      const res = await fetch(`${API_URL}/api/empresas/${editingCompany.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: editCompName,
+          plano: editCompPlano
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Erro ao atualizar empresa.');
+      }
+      setSuccessMsg('Empresa atualizada com sucesso!');
+      setEditingCompany(null);
+      fetchCompanies();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete Company
+  const handleDeleteCompany = async () => {
+    if (!confirmDeleteCompany) return;
+    setLoading(true);
+    clearMessages();
+    try {
+      const res = await fetch(`${API_URL}/api/empresas/${confirmDeleteCompany.id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Erro ao excluir empresa.');
+      }
+      setSuccessMsg('Empresa excluída com sucesso!');
+      setConfirmDeleteCompany(null);
+      fetchCompanies();
+      fetchUsers(); // Users might have their company_id cleared
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update User
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setLoading(true);
+    clearMessages();
+    try {
+      const res = await fetch(`${API_URL}/api/usuarios/${editingUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: editUserName,
+          cargo: editUserCargo,
+          nivel_permissao: editUserPerm,
+          departamento: editUserDept
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Erro ao atualizar usuário.');
+      }
+      setSuccessMsg('Usuário atualizado com sucesso!');
+      setEditingUser(null);
+      fetchUsers(filterEmpresaId);
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete User
+  const handleDeleteUser = async () => {
+    if (!confirmDeleteUser) return;
+    setLoading(true);
+    clearMessages();
+    try {
+      const res = await fetch(`${API_URL}/api/usuarios/${confirmDeleteUser.id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Erro ao excluir usuário.');
+      }
+      setSuccessMsg('Usuário excluído com sucesso!');
+      setConfirmDeleteUser(null);
+      fetchUsers(filterEmpresaId);
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -742,14 +865,40 @@ export default function App() {
                           </td>
                           <td>{new Date(company.criado_em).toLocaleDateString('pt-BR')}</td>
                           <td style={{ textAlign: 'right' }}>
-                            <button 
-                              onClick={() => toggleCompanyStatus(company)} 
-                              className="btn btn-secondary" 
-                              style={{ padding: '6px 12px', fontSize: '12px' }}
-                            >
-                              {company.ativo ? <ToggleRight size={18} style={{ color: 'var(--status-success)' }} /> : <ToggleLeft size={18} style={{ color: 'var(--status-error)' }} />}
-                              {company.ativo ? 'Desativar' : 'Ativar'}
-                            </button>
+                            <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                              <button 
+                                onClick={() => {
+                                  setEditingCompany(company);
+                                  setEditCompName(company.nome);
+                                  setEditCompPlano(company.plano);
+                                }}
+                                className="btn btn-secondary" 
+                                style={{ padding: '6px 10px', fontSize: '12px', gap: '4px' }}
+                                title="Editar"
+                              >
+                                <Edit size={14} />
+                                <span>Editar</span>
+                              </button>
+
+                              <button 
+                                onClick={() => toggleCompanyStatus(company)} 
+                                className="btn btn-secondary" 
+                                style={{ padding: '6px 10px', fontSize: '12px', gap: '4px' }}
+                              >
+                                {company.ativo ? <ToggleRight size={14} style={{ color: 'var(--status-success)' }} /> : <ToggleLeft size={14} style={{ color: 'var(--status-error)' }} />}
+                                <span>{company.ativo ? 'Desativar' : 'Ativar'}</span>
+                              </button>
+
+                              <button 
+                                onClick={() => setConfirmDeleteCompany(company)}
+                                className="btn btn-danger" 
+                                style={{ padding: '6px 10px', fontSize: '12px', gap: '4px' }}
+                                title="Excluir"
+                              >
+                                <Trash2 size={14} />
+                                <span>Excluir</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1025,6 +1174,7 @@ export default function App() {
                           <th>Cargo / Depto</th>
                           <th>Permissão</th>
                           <th>Criação</th>
+                          <th style={{ textAlign: 'right' }}>Ações</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1050,6 +1200,35 @@ export default function App() {
                               </span>
                             </td>
                             <td>{new Date(user.criado_em).toLocaleDateString('pt-BR')}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                                <button 
+                                  onClick={() => {
+                                    setEditingUser(user);
+                                    setEditUserName(user.nome);
+                                    setEditUserCargo(user.cargo || '');
+                                    setEditUserPerm(user.nivel_permissao);
+                                    setEditUserDept(user.departamento || '');
+                                  }}
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '6px 10px', fontSize: '12px', gap: '4px' }}
+                                  title="Editar"
+                                >
+                                  <Edit size={14} />
+                                  <span>Editar</span>
+                                </button>
+
+                                <button 
+                                  onClick={() => setConfirmDeleteUser(user)}
+                                  className="btn btn-danger" 
+                                  style={{ padding: '6px 10px', fontSize: '12px', gap: '4px' }}
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={14} />
+                                  <span>Excluir</span>
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1088,7 +1267,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="table-container">
-                  <table className="table">
+                   <table className="table">
                     <thead>
                       <tr>
                         <th>Nome</th>
@@ -1097,6 +1276,7 @@ export default function App() {
                         <th>Departamento</th>
                         <th>Permissão</th>
                         <th>Primeiro Acesso</th>
+                        <th style={{ textAlign: 'right' }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1119,6 +1299,35 @@ export default function App() {
                               {user.primeiro_acesso ? 'Pendente' : 'Realizado'}
                             </span>
                           </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                              <button 
+                                onClick={() => {
+                                  setEditingUser(user);
+                                  setEditUserName(user.nome);
+                                  setEditUserCargo(user.cargo || '');
+                                  setEditUserPerm(user.nivel_permissao);
+                                  setEditUserDept(user.departamento || '');
+                                }}
+                                className="btn btn-secondary" 
+                                style={{ padding: '6px 10px', fontSize: '12px', gap: '4px' }}
+                                title="Editar"
+                              >
+                                <Edit size={14} />
+                                <span>Editar</span>
+                              </button>
+
+                              <button 
+                                onClick={() => setConfirmDeleteUser(user)}
+                                className="btn btn-danger" 
+                                style={{ padding: '6px 10px', fontSize: '12px', gap: '4px' }}
+                                title="Excluir"
+                              >
+                                <Trash2 size={14} />
+                                <span>Excluir</span>
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1129,6 +1338,169 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* MODAL: EDITAR EMPRESA */}
+      {editingCompany && (
+        <div className="modal-backdrop">
+          <div className="modal-content animate-fade-in">
+            <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Editar Empresa</h3>
+            <form onSubmit={handleUpdateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px' }}>Nome da Empresa</label>
+                <input 
+                  type="text" 
+                  className="input" 
+                  value={editCompName} 
+                  onChange={(e) => setEditCompName(e.target.value)} 
+                  required 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px' }}>Plano da Assinatura</label>
+                <select 
+                  className="input" 
+                  value={editCompPlano} 
+                  onChange={(e) => setEditCompPlano(e.target.value)}
+                >
+                  <option value="free">Básico / Gratuito</option>
+                  <option value="premium">Premium</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button type="submit" className="btn btn-primary" style={{ flexGrow: 1 }} disabled={loading}>
+                  {loading ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+                <button type="button" onClick={() => setEditingCompany(null)} className="btn btn-secondary">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAR EXCLUSÃO DE EMPRESA */}
+      {confirmDeleteCompany && (
+        <div className="modal-backdrop">
+          <div className="modal-content animate-fade-in" style={{ maxWidth: '440px' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <div style={{ padding: '10px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-error)', flexShrink: 0 }}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '6px' }}>Excluir Empresa</h3>
+                <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                  Tem certeza que deseja excluir esta empresa?
+                </p>
+                <p style={{ fontSize: '13px', color: 'var(--status-error)', marginTop: '8px', fontWeight: '500' }}>
+                  Nome: {confirmDeleteCompany.nome}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={handleDeleteCompany} className="btn btn-danger" style={{ flexGrow: 1 }} disabled={loading}>
+                {loading ? 'Excluindo...' : 'Sim, Excluir'}
+              </button>
+              <button onClick={() => setConfirmDeleteCompany(null)} className="btn btn-secondary" style={{ flexGrow: 1 }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR USUÁRIO */}
+      {editingUser && (
+        <div className="modal-backdrop">
+          <div className="modal-content animate-fade-in">
+            <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>Editar Usuário</h3>
+            <form onSubmit={handleUpdateUser} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px' }}>Nome Completo</label>
+                <input 
+                  type="text" 
+                  className="input" 
+                  value={editUserName} 
+                  onChange={(e) => setEditUserName(e.target.value)} 
+                  required 
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px' }}>Cargo</label>
+                  <input 
+                    type="text" 
+                    className="input" 
+                    value={editUserCargo} 
+                    onChange={(e) => setEditUserCargo(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px' }}>Departamento</label>
+                  <input 
+                    type="text" 
+                    className="input" 
+                    value={editUserDept} 
+                    onChange={(e) => setEditUserDept(e.target.value)} 
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px' }}>Nível de Permissão</label>
+                <select 
+                  className="input" 
+                  value={editUserPerm} 
+                  onChange={(e) => setEditUserPerm(e.target.value as any)}
+                >
+                  <option value="colaborador">Colaborador (Responder Quizzes)</option>
+                  <option value="gestor">Gestor (Acompanhar Equipe)</option>
+                  <option value="admin">Administrador da Empresa</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button type="submit" className="btn btn-primary" style={{ flexGrow: 1 }} disabled={loading}>
+                  {loading ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+                <button type="button" onClick={() => setEditingUser(null)} className="btn btn-secondary">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAR EXCLUSÃO DE USUÁRIO */}
+      {confirmDeleteUser && (
+        <div className="modal-backdrop">
+          <div className="modal-content animate-fade-in" style={{ maxWidth: '440px' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <div style={{ padding: '10px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-error)', flexShrink: 0 }}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '6px' }}>Excluir Usuário</h3>
+                <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                  Tem certeza que deseja excluir este usuário? Esta ação removerá o acesso do usuário ao sistema definitivamente.
+                </p>
+                <p style={{ fontSize: '13px', color: 'var(--status-error)', marginTop: '8px', fontWeight: '500' }}>
+                  Nome: {confirmDeleteUser.nome}<br />
+                  E-mail: {confirmDeleteUser.email}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={handleDeleteUser} className="btn btn-danger" style={{ flexGrow: 1 }} disabled={loading}>
+                {loading ? 'Excluindo...' : 'Sim, Excluir'}
+              </button>
+              <button onClick={() => setConfirmDeleteUser(null)} className="btn btn-secondary" style={{ flexGrow: 1 }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

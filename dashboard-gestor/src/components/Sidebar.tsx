@@ -8,7 +8,8 @@ import {
   Award, 
   Download, 
   LogOut,
-  Trophy
+  Trophy,
+  Bell
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ companyName }) => {
     { to: '/conteudo', label: 'Quizzes e Conteúdo', icon: BookOpen },
     { to: '/analytics', label: 'Analytics & ROI', icon: TrendingUp },
     { to: '/gamificacao', label: 'Gamificação', icon: Award },
+    { to: '/notificacoes', label: 'Notificações', icon: Bell },
     { to: '/relatorios', label: 'Relatórios', icon: Download },
   ];
 

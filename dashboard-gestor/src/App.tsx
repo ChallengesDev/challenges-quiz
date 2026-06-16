@@ -12,6 +12,7 @@ import { ContentManagement } from './pages/ContentManagement';
 import { Analytics } from './pages/Analytics';
 import { GamificationSettings } from './pages/GamificationSettings';
 import { Reports } from './pages/Reports';
+import { Notifications } from './pages/Notifications';
 
 const LayoutWrapper: React.FC<{ children: React.ReactNode; companyName: string; userName: string; userEmail: string }> = ({
   children,
@@ -34,6 +35,8 @@ const LayoutWrapper: React.FC<{ children: React.ReactNode; companyName: string; 
         return 'Analytics & ROI de Treinamento';
       case '/gamificacao':
         return 'Configurações de Gamificação';
+      case '/notificacoes':
+        return 'Notificações da Empresa';
       case '/relatorios':
         return 'Relatórios e Auditoria';
       default:
@@ -215,6 +218,19 @@ export default function App() {
             session ? (
               <LayoutWrapper companyName={companyName} userName={userName} userEmail={userEmail}>
                 <GamificationSettings />
+              </LayoutWrapper>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/notificacoes"
+          element={
+            session ? (
+              <LayoutWrapper companyName={companyName} userName={userName} userEmail={userEmail}>
+                <Notifications />
               </LayoutWrapper>
             ) : (
               <Navigate to="/login" replace />

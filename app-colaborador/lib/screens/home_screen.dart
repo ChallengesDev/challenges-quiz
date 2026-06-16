@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
+import '../providers/notifications_provider.dart';
 import '../components/streak_flame.dart';
 import '../models/models.dart';
 
@@ -40,6 +41,21 @@ class _HomeScreenState extends State<HomeScreen> {
           authProvider.colaborador!.empresaId ?? 'mock-company-123',
           authProvider.isMock
         );
+
+        // Fetch notifications & subscribe to realtime
+        final notificationsProvider = Provider.of<NotificationsProvider>(context, listen: false);
+        notificationsProvider.loadNotifications(
+          authProvider.colaborador!.id,
+          authProvider.isMock
+        );
+        notificationsProvider.subscribeToRealtimeNotifications(
+          authProvider.colaborador!.id,
+          authProvider.isMock
+        );
+        notificationsProvider.updateLastAccess(
+          authProvider.colaborador!.id,
+          authProvider.isMock
+        );
       }
     });
   }
@@ -65,6 +81,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _countdownTimer.cancel();
+    // Unsubscribe from realtime notifications
+    try {
+      Provider.of<NotificationsProvider>(context, listen: false).unsubscribeRealtime();
+    } catch (e) {
+      print('Erro ao cancelar assinatura realtime de notificações: $e');
+    }
     super.dispose();
   }
 
@@ -72,8 +94,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final profileProvider = Provider.of<ProfileProvider>(context);
+    final notificationsProvider = Provider.of<NotificationsProvider>(context);
     final colab = authProvider.colaborador;
     final score = profileProvider.pontuacao;
+    final unreadCount = notificationsProvider.unreadCount;
 
     if (colab == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -90,6 +114,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xff0b0f19),
+      appBar: AppBar(
+        title: const Text(
+          'Challenges Quiz',
+          style: TextStyle(
+            fontFamily: 'Outfit',
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none_outlined, size: 26),
+                onPressed: () {
+                  Navigator.pushNamed(context, '/notifications');
+                },
+              ),
+              if (unreadCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffef4444),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xff0b0f19), width: 1.5),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+        ],
+      ),
       body: SafeArea(
         child: tabs[_currentTabIndex],
       ),
