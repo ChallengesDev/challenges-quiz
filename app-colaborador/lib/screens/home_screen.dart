@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:confetti/confetti.dart';
 import '../providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../components/streak_flame.dart';
+import '../components/mascot_widget.dart';
 import '../models/models.dart';
 
 // Screens mapped in tabs
@@ -24,11 +26,14 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
   late Timer _countdownTimer;
   String _timeUntilMidnight = '00:00:00';
+  late ConfettiController _confettiController;
+  bool _alertShownToday = false;
 
   @override
   void initState() {
     super.initState();
     _startCountdown();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     
     // Load profile stats
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -78,10 +83,198 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _checkOnboardingAndAlerts(ProfileProvider profileProvider) {
+    if (profileProvider.loading) return;
+
+    // 1. Goal onboarding check
+    if (!profileProvider.hasOnboardedGoal) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showOnboardingGoalDialog(profileProvider);
+      });
+    }
+
+    // 2. Alert check for 20:00 (8 PM)
+    final now = DateTime.now();
+    if (now.hour >= 20 && !profileProvider.playedToday && !_alertShownToday) {
+      _alertShownToday = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDialog(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              backgroundColor: const Color(0xff151c2c),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Colors.redAccent, width: 2),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.local_fire_department, color: Colors.redAccent, size: 28),
+                  SizedBox(width: 8),
+                  Text('SUA CHAMA VAI APAGAR!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+              content: const Text(
+                'Sua chama está prestes a apagar hoje! Faça pelo menos 1 desafio para manter sua sequência ativa!',
+                style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Entendi, vamos jogar!', style: TextStyle(color: Color(0xff00f5d4), fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      });
+    }
+
+    // 3. Confetti animation check
+    if (profileProvider.shouldShowConfetti) {
+      _confettiController.play();
+      profileProvider.consumeConfetti();
+    }
+  }
+
+  void _showOnboardingGoalDialog(ProfileProvider profileProvider) {
+    int selectedMinutes = 10; // Default selection
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xff151c2c),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xff6c5ce7), width: 2),
+              ),
+              title: const Text(
+                'Meta de Estudo Diária',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Quanto tempo você quer dedicar por dia?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildGoalOnboardingOption('Casual', 5, selectedMinutes, (val) {
+                    setDialogState(() {
+                      selectedMinutes = val;
+                    });
+                  }),
+                  const SizedBox(height: 12),
+                  _buildGoalOnboardingOption('Regular', 10, selectedMinutes, (val) {
+                    setDialogState(() {
+                      selectedMinutes = val;
+                    });
+                  }),
+                  const SizedBox(height: 12),
+                  _buildGoalOnboardingOption('Sério', 15, selectedMinutes, (val) {
+                    setDialogState(() {
+                      selectedMinutes = val;
+                    });
+                  }),
+                  const SizedBox(height: 12),
+                  _buildGoalOnboardingOption('Intenso', 20, selectedMinutes, (val) {
+                    setDialogState(() {
+                      selectedMinutes = val;
+                    });
+                  }),
+                  const SizedBox(height: 24),
+                  // Confirm / Continue button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff00f5d4),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () {
+                        profileProvider.updateDailyGoal(selectedMinutes);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xff00f5d4),
+                            content: Text(
+                              'Sua meta diária foi definida para $selectedMinutes minutos!',
+                              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'Confirmar',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildGoalOnboardingOption(
+    String label, 
+    int minutes, 
+    int selectedMinutes, 
+    ValueChanged<int> onSelected
+  ) {
+    final isSelected = selectedMinutes == minutes;
+    return InkWell(
+      onTap: () => onSelected(minutes),
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xff6c5ce7).withOpacity(0.2) : const Color(0xff0b0f19),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xff6c5ce7) : const Color(0xff243049),
+            width: isSelected ? 2.0 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '$label ($minutes min/dia)',
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.white70,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle, color: Color(0xff00f5d4), size: 20)
+            else
+              const Icon(Icons.radio_button_unchecked, color: Colors.white30, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _countdownTimer.cancel();
-    // Unsubscribe from realtime notifications
+    _confettiController.dispose();
     try {
       Provider.of<NotificationsProvider>(context, listen: false).unsubscribeRealtime();
     } catch (e) {
@@ -103,9 +296,12 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // Run alerts and onboarding triggers
+    _checkOnboardingAndAlerts(profileProvider);
+
     // Tabs mapping
     final List<Widget> tabs = [
-      _buildDashboardTab(colab, score),
+      _buildDashboardTab(colab, score, profileProvider),
       TrailScreen(colabId: colab.id, isMock: authProvider.isMock),
       RankingScreen(colabId: colab.id),
       const AchievementsScreen(),
@@ -168,7 +364,29 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: tabs[_currentTabIndex],
+        child: Stack(
+          children: [
+            tabs[_currentTabIndex],
+            // Confetti effect overlay
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: _confettiController,
+                blastDirectionality: BlastDirectionality.explosive,
+                shouldLoop: false,
+                colors: const [
+                  Colors.green,
+                  Colors.blue,
+                  Colors.pink,
+                  Colors.orange,
+                  Colors.purple,
+                  Color(0xff00f5d4),
+                  Color(0xff6c5ce7)
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -219,15 +437,27 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDashboardTab(Colaborador colab, Pontuacao? score) {
+  Widget _buildDashboardTab(Colaborador colab, Pontuacao? score, ProfileProvider profileProvider) {
     int currentXp = score?.xpTotal ?? 0;
     int currentLevel = score?.nivel ?? 1;
-    // XP limits: 500 XP per level
-    int nextLevelXp = currentLevel * 500;
-    int prevLevelXp = (currentLevel - 1) * 500;
-    int xpInLevel = currentXp - prevLevelXp;
     int xpNeededForNext = 500;
+    int xpInLevel = currentXp % xpNeededForNext;
     double xpProgress = (xpInLevel / xpNeededForNext).clamp(0.0, 1.0);
+
+    // Mascot phrases for the dashboard
+    String mascotMessage = 'Olá! Pronto para mais um desafio de hoje?';
+    if (profileProvider.playedToday) {
+      if (profileProvider.dailyPlayTimeMinutes >= profileProvider.dailyGoalMinutes) {
+        mascotMessage = 'Sensacional! Meta diária cumprida! 🚀';
+      } else {
+        mascotMessage = 'Ótimo começo! Continue para bater sua meta.';
+      }
+    } else {
+      final now = DateTime.now();
+      if (now.hour >= 20) {
+        mascotMessage = 'Atenção! Sua chama vai apagar! 🚨';
+      }
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
@@ -289,9 +519,95 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               
-              // Streak Flame Component
-              StreakFlame(streak: score?.streakAtual ?? 0),
+              // Interactive Streak Flame
+              StreakFlame(
+                streak: score?.streakAtual ?? 0,
+                playedToday: profileProvider.playedToday,
+                isStreakFreezeActive: profileProvider.isStreakFreezeActive,
+              ),
             ],
+          ),
+          
+          const SizedBox(height: 24),
+
+          // Reactive Mascot Card on Dashboard
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xff151c2c),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xff243049)),
+            ),
+            child: Row(
+              children: [
+                MascotWidget(
+                  state: profileProvider.playedToday ? 'happy' : 'idle',
+                  size: 76,
+                  speechBubbleText: mascotMessage,
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'A constância diária garante que você absorva melhor o conhecimento regulamentar e mantenha a conformidade corporativa em alto nível!',
+                    style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4, fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Customizable Daily Goal Progress Card (Circular)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xff151c2c),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xff243049)),
+            ),
+            child: Row(
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 76,
+                      height: 76,
+                      child: CircularProgressIndicator(
+                        value: (profileProvider.dailyPlayTimeMinutes / profileProvider.dailyGoalMinutes).clamp(0.0, 1.0),
+                        strokeWidth: 6,
+                        backgroundColor: Colors.white10,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xff00f5d4)),
+                      ),
+                    ),
+                    Text(
+                      '${(profileProvider.dailyPlayTimeMinutes).toInt()}/${profileProvider.dailyGoalMinutes}m',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Meta Diária',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        profileProvider.dailyPlayTimeMinutes >= profileProvider.dailyGoalMinutes
+                            ? 'Meta concluída! +100 XP extras concedidos!'
+                            : 'Faltam ${(profileProvider.dailyGoalMinutes - profileProvider.dailyPlayTimeMinutes).toInt().clamp(0, 99)} min para atingir sua meta diária de hoje.',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.3),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           
           const SizedBox(height: 24),

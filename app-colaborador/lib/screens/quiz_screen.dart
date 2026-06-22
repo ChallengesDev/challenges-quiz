@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:web/web.dart' as web; // Cross-platform HTML stub compiles on web and native
 import '../providers/auth_provider.dart';
 import '../providers/quiz_provider.dart';
+import '../providers/profile_provider.dart';
 import '../components/mascot_widget.dart';
 import '../components/eye_tracker_preview.dart';
 import '../models/models.dart';
@@ -123,10 +124,21 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  String _getReinforcementPhrase(bool isCorrect, int questionIndex) {
+    final correctPhrases = ["Perfeito!", "Você sabe disso!", "Excelente!", "Fantástico!", "Muito bem!"];
+    final incorrectPhrases = ["Quase lá! Vamos tentar de novo", "Essa foi difícil, continue!", "Não desanime!", "Foco no aprendizado!"];
+    if (isCorrect) {
+      return correctPhrases[questionIndex % correctPhrases.length];
+    } else {
+      return incorrectPhrases[questionIndex % incorrectPhrases.length];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final quizProvider = Provider.of<QuizProvider>(context);
+    final profileProvider = Provider.of<ProfileProvider>(context);
     
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args == null || args is! Desafio || authProvider.colaborador == null) {
@@ -177,6 +189,14 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
         backgroundColor: Color(0xff0b0f19),
         body: Center(child: CircularProgressIndicator()),
       );
+    }
+
+    // Determine Mascot contextual text
+    String mascotSpeechText = 'Você consegue! Leia com atenção.';
+    if (quizProvider.showingFeedback) {
+      mascotSpeechText = _getReinforcementPhrase(quizProvider.isCorrectAnswer!, indexQ);
+    } else if (quizProvider.timeLeft < 10) {
+      mascotSpeechText = 'Rápido! O tempo está acabando!';
     }
 
     return Scaffold(
@@ -253,9 +273,9 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                             Text(
                               'Integridade: ${quizProvider.integrityScore}%',
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: quizProvider.integrityScore < 70 ? Colors.redAccent : const Color(0xff00f5d4),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: quizProvider.integrityScore < 70 ? Colors.redAccent : const Color(0xff00f5d4),
                               ),
                             )
                           ],
@@ -269,6 +289,7 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                   // Mascot + Combo Indicator + Timer Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       // Streak/Combo Badge
                       if (quizProvider.streakCount >= 2)
@@ -293,8 +314,15 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                       else
                         const SizedBox(width: 80),
 
-                      // Bouncing Mascot
-                      MascotWidget(state: quizProvider.mascotState, size: 90),
+                      // Bouncing Mascot with dynamic speech bubble
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: MascotWidget(
+                          state: quizProvider.mascotState, 
+                          size: 90,
+                          speechBubbleText: mascotSpeechText,
+                        ),
+                      ),
 
                       // Circular countdown timer
                       Container(
@@ -321,7 +349,7 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                     ],
                   ),
                   
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                   
                   // Question Card
                   Container(
@@ -343,11 +371,12 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   
                   // Answers list (A, B, C, D)
                   Expanded(
                     child: ListView(
+                      padding: const EdgeInsets.only(bottom: 120), // Padding to clear bottom feedback bar
                       children: [
                         _buildAlternativeButton(context, 'A', currentQ.alternativaA, colab.id, authProvider.isMock),
                         const SizedBox(height: 12),
@@ -365,6 +394,15 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
             
             // Eye-tracker webcam preview overlay
             EyeTrackerPreview(colabId: colab.id, isMock: authProvider.isMock),
+
+            // Bottom feedback panel (Duolingo style)
+            if (quizProvider.showingFeedback)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: _buildFeedbackPanel(context, quizProvider, colab.id, authProvider.isMock, profileProvider),
+              ),
           ],
         ),
       ),
@@ -372,47 +410,182 @@ class _QuizScreenState extends State<QuizScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildAlternativeButton(BuildContext context, String prefix, String text, String colabId, bool isMock) {
-    final quizProvider = Provider.of<QuizProvider>(context, listen: false);
+    final quizProvider = Provider.of<QuizProvider>(context);
+    final currentQ = quizProvider.currentPergunta!;
+    final isShowingFeedback = quizProvider.showingFeedback;
+    final isSelected = quizProvider.selectedAlternative == prefix;
+    final isCorrectOption = currentQ.respostaCorreta == prefix;
     
-    // Determines if button is tapped or disabled
-    return ElevatedButton(
-      onPressed: () {
-        quizProvider.submitAnswer(prefix, colabId, isMock);
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xff151c2c),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        alignment: Alignment.centerLeft,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xff243049), width: 1.5),
+    Color buttonColor = const Color(0xff151c2c);
+    Color borderColor = const Color(0xff243049);
+    double opacity = 1.0;
+
+    if (isShowingFeedback) {
+      if (isCorrectOption) {
+        buttonColor = const Color(0xff1b4332).withOpacity(0.4);
+        borderColor = const Color(0xff2ecc71);
+      } else if (isSelected && !quizProvider.isCorrectAnswer!) {
+        buttonColor = const Color(0xff4a1525).withOpacity(0.4);
+        borderColor = Colors.redAccent;
+      } else {
+        opacity = 0.4;
+      }
+    }
+
+    return Opacity(
+      opacity: opacity,
+      child: ElevatedButton(
+        onPressed: isShowingFeedback
+            ? null
+            : () {
+                quizProvider.submitAnswer(prefix, colabId, isMock);
+              },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: buttonColor,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          alignment: Alignment.centerLeft,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor, width: isShowingFeedback && (isCorrectOption || isSelected) ? 2.5 : 1.5),
+          ),
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xff6c5ce7).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xff6c5ce7)),
-            ),
-            child: Text(
-              prefix,
-              style: const TextStyle(
-                color: Color(0xff6c5ce7),
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xff6c5ce7).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xff6c5ce7)),
+              ),
+              child: Text(
+                prefix,
+                style: const TextStyle(
+                  color: Color(0xff6c5ce7),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, height: 1.3),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeedbackPanel(
+    BuildContext context, 
+    QuizProvider quizProvider, 
+    String colabId, 
+    bool isMock, 
+    ProfileProvider profileProvider
+  ) {
+    final isCorrect = quizProvider.isCorrectAnswer!;
+    final currentQ = quizProvider.currentPergunta!;
+    final hasExplanation = currentQ.explicacao != null && currentQ.explicacao!.isNotEmpty;
+
+    final Color panelColor = isCorrect ? const Color(0xff1b4332) : const Color(0xff4a1525);
+    final Color textColor = isCorrect ? const Color(0xff2ecc71) : Colors.redAccent;
+    final IconData icon = isCorrect ? Icons.check_circle : Icons.error;
+
+    // Reinforcement text inside feedback
+    final reinforcement = _getReinforcementPhrase(isCorrect, quizProvider.currentQuestionIndex);
+
+    // Calculate dynamic XP shown
+    int baseMultiplier = 1;
+    if (quizProvider.streakCount >= 3) baseMultiplier = 2;
+    final earnedXP = (quizProvider.currentDesafio?.pontuacao ?? 100) ~/ quizProvider.perguntas.length * baseMultiplier;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: panelColor,
+        border: Border(top: BorderSide(color: textColor, width: 2)),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: textColor, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      reinforcement,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (isCorrect) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '+$earnedXP XP obtido!',
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, height: 1.3),
+          
+          if (!isCorrect) ...[
+            const SizedBox(height: 12),
+            Text(
+              'A resposta correta era: ${currentQ.respostaCorreta}',
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            if (hasExplanation) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  currentQ.explicacao!,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                ),
+              ),
+            ],
+          ],
+
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              quizProvider.nextQuestion(colabId, isMock, profileProvider);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isCorrect ? const Color(0xff2ecc71) : Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: const Text(
+              'Entendi, continuar',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ),
         ],

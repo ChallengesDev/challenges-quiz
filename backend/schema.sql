@@ -50,6 +50,8 @@ create table public.usuarios (
     nivel_permissao text not null default 'colaborador' check (nivel_permissao in ('colaborador', 'gestor', 'admin')),
     ativo boolean not null default true,
     primeiro_acesso boolean not null default true,
+    meta_diaria integer not null default 10,
+    meta_diaria_definida boolean not null default false,
     criado_em timestamptz not null default now()
 );
 
@@ -102,6 +104,7 @@ create table public.perguntas (
     alternativa_c text not null,
     alternativa_d text not null,
     resposta_correta char(1) not null check (resposta_correta in ('A', 'B', 'C', 'D')),
+    explicacao text,
     criado_em timestamptz not null default now()
 );
 

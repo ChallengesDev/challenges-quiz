@@ -336,6 +336,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
+            const SizedBox(height: 24),
+
+            // Adjust Daily Goal
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xff151c2c),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xff243049)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.query_builder, color: Color(0xff00f5d4), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Ajustar Meta Diária',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildGoalChip(context, profileProvider, 'Casual', 5),
+                      _buildGoalChip(context, profileProvider, 'Regular', 10),
+                      _buildGoalChip(context, profileProvider, 'Sério', 15),
+                      _buildGoalChip(context, profileProvider, 'Intenso', 20),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Streak Freeze Info
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xff151c2c),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xff243049)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.ac_unit, color: Colors.cyanAccent, size: 20),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Streak Freeze',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Possui ${profileProvider.streakFreezeCount} disponível(is) ${profileProvider.isStreakFreezeActive ? "(Equipado)" : ""}',
+                            style: const TextStyle(color: Colors.white60, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/streak_freeze');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xff6c5ce7).withOpacity(0.2),
+                      foregroundColor: const Color(0xff6c5ce7),
+                      side: const BorderSide(color: Color(0xff6c5ce7)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    child: const Text(
+                      'Ver Proteção',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 32),
 
             // Actions Area
@@ -543,6 +635,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildGoalChip(BuildContext context, ProfileProvider profileProvider, String label, int minutes) {
+    final isSelected = profileProvider.dailyGoalMinutes == minutes;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? Colors.black : Colors.white70,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
+          profileProvider.updateDailyGoal(minutes);
+        }
+      },
+      selectedColor: const Color(0xff00f5d4),
+      backgroundColor: const Color(0xff0b0f19),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: isSelected ? const Color(0xff00f5d4) : const Color(0xff243049)),
+      ),
     );
   }
 }

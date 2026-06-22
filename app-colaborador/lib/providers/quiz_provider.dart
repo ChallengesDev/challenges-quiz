@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
+import '../components/sound_manager.dart';
+import 'profile_provider.dart';
 
 class QuizProvider extends ChangeNotifier {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -12,7 +15,7 @@ class QuizProvider extends ChangeNotifier {
   
   // State variables
   bool _loading = false;
-  String _mascotState = 'idle'; // 'idle', 'happy', 'sad', 'nervous'
+  String _mascotState = 'idle'; // 'idle', 'happy', 'sad', 'nervous', 'celebrating'
   int _score = 0;
   int _streakCount = 0;
   int _correctCount = 0;
@@ -33,6 +36,11 @@ class QuizProvider extends ChangeNotifier {
   DateTime? _eyeDriftStartTime;
   Timer? _eyeDriftTimer;
 
+  // New feedback variables for Duolingo style
+  String? _selectedAlternative;
+  bool? _isCorrectAnswer;
+  bool _showingFeedback = false;
+
   // Getters
   Desafio? get currentDesafio => _currentDesafio;
   List<Pergunta> get perguntas => _perguntas;
@@ -50,6 +58,10 @@ class QuizProvider extends ChangeNotifier {
   bool get isSuspiciousSpeed => _isSuspiciousSpeed;
   bool get eyeDriftActive => _eyeDriftActive;
 
+  String? get selectedAlternative => _selectedAlternative;
+  bool? get isCorrectAnswer => _isCorrectAnswer;
+  bool get showingFeedback => _showingFeedback;
+
   // Initialize Quiz
   Future<void> startQuiz(Desafio desafio, String colabId, bool isMock) async {
     _loading = true;
@@ -66,11 +78,16 @@ class QuizProvider extends ChangeNotifier {
     _mascotState = 'idle';
     _isSuspiciousSpeed = false;
     _eyeDriftActive = false;
+
+    _selectedAlternative = null;
+    _isCorrectAnswer = null;
+    _showingFeedback = false;
+    
     notifyListeners();
 
     try {
       if (isMock) {
-        // Load mock questions
+        // Load mock questions with explanations
         _perguntas = [
           Pergunta(
             id: 'p1',
@@ -81,6 +98,7 @@ class QuizProvider extends ChangeNotifier {
             alternativaC: 'Em até 5 dias úteis contados do evento',
             alternativaD: 'Em até 30 dias corridos',
             respostaCorreta: 'B',
+            explicacao: 'O artigo 48 da LGPD determina que o controlador deve comunicar à autoridade nacional (ANPD) a ocorrência de incidente de segurança em prazo razoável, estabelecido pela ANPD em até 2 dias úteis.',
           ),
           Pergunta(
             id: 'p2',
@@ -91,6 +109,7 @@ class QuizProvider extends ChangeNotifier {
             alternativaC: 'Proteção do Crédito',
             alternativaD: 'Obrigação Legal ou Regulatória',
             respostaCorreta: 'C',
+            explicacao: 'A proteção do crédito é uma base legal explícita do artigo 7º, inciso X da LGPD, dispensando o consentimento para a análise de risco de inadimplência.',
           ),
           Pergunta(
             id: 'p3',
@@ -101,6 +120,7 @@ class QuizProvider extends ChangeNotifier {
             alternativaC: 'Manipular o usuário para obter senhas ou informações confidenciais',
             alternativaD: 'Instalar vírus mineradores de cripto no celular do usuário',
             respostaCorreta: 'C',
+            explicacao: 'O phishing é um ataque de engenharia social clássico que visa enganar as pessoas para que compartilhem informações sensíveis, como senhas ou cartões de crédito.',
           ),
         ];
         
@@ -156,7 +176,7 @@ class QuizProvider extends ChangeNotifier {
     });
   }
 
-  // Answer Quiz question
+  // Answer Quiz question (Locks answer and shows feedback)
   Future<bool> submitAnswer(String alternativa, String colabId, bool isMock) async {
     _timer?.cancel();
     
@@ -164,6 +184,10 @@ class QuizProvider extends ChangeNotifier {
     final currentQ = _perguntas[_currentQuestionIndex];
     final isCorrect = alternativa == currentQ.respostaCorreta;
     
+    _selectedAlternative = alternativa;
+    _isCorrectAnswer = isCorrect;
+    _showingFeedback = true;
+
     // Calcula velocidade de clique
     final clickDurationMs = DateTime.now().difference(_questionStartTime!).inMilliseconds;
     if (clickDurationMs < 1500 && alternativa != 'timeout') {
@@ -183,9 +207,17 @@ class QuizProvider extends ChangeNotifier {
       
       final earnedXP = (_currentDesafio?.pontuacao ?? 100) ~/ _perguntas.length * baseMultiplier;
       _score += earnedXP;
+
+      // Play success feedback
+      SoundManager.playSuccess();
+      HapticFeedback.lightImpact();
     } else {
       _streakCount = 0;
       _mascotState = 'sad';
+
+      // Play failure feedback
+      SoundManager.playError();
+      HapticFeedback.mediumImpact();
     }
     
     notifyListeners();
@@ -205,8 +237,14 @@ class QuizProvider extends ChangeNotifier {
       print('Erro ao registrar resposta no banco: $e');
     }
 
-    // Wait 2 seconds to show feedback (happy/sad mascot) and transition
-    await Future.delayed(const Duration(seconds: 2));
+    return isCorrect;
+  }
+
+  // Advance to next question or complete quiz
+  Future<void> nextQuestion(String colabId, bool isMock, ProfileProvider profileProvider) async {
+    _selectedAlternative = null;
+    _isCorrectAnswer = null;
+    _showingFeedback = false;
 
     _currentQuestionIndex++;
     if (_currentQuestionIndex < _perguntas.length) {
@@ -214,18 +252,24 @@ class QuizProvider extends ChangeNotifier {
       _startQuestionTimer();
       notifyListeners();
     } else {
-      await finishQuiz(colabId, isMock);
+      await finishQuiz(colabId, isMock, profileProvider);
     }
-
-    return isCorrect;
   }
 
   // Finish Quiz flow
-  Future<void> finishQuiz(String colabId, bool isMock) async {
+  Future<void> finishQuiz(String colabId, bool isMock, ProfileProvider profileProvider) async {
     _timer?.cancel();
     _quizConcluido = true;
-    _mascotState = 'happy';
+    _mascotState = 'celebrating';
     notifyListeners();
+
+    // Sound and vibration feedback for completing the whole challenge
+    SoundManager.playFanfare();
+    HapticFeedback.heavyImpact();
+
+    // Add playtime: Let's assume 5 minutes spent on this quiz
+    await profileProvider.addPlayTime(5.0, isMock);
+    await profileProvider.incrementStreak(isMock);
 
     try {
       if (!isMock && _sessaoId != null) {
@@ -237,29 +281,11 @@ class QuizProvider extends ChangeNotifier {
           'score_integridade': _integrityScore
         }).eq('id', _sessaoId!);
 
-        // Increment user's global score / XP
-        final currentScore = await _supabase
-            .from('pontuacoes')
-            .select()
-            .eq('usuario_id', colabId)
-            .single();
-
-        if (currentScore != null) {
-          int newXp = (currentScore['xp_total'] as int) + _score;
-          int currentNivel = currentScore['nivel'] as int;
-          // Level up algorithm (every 500 XP = 1 level)
-          int newNivel = (newXp ~/ 500) + 1;
-          if (newNivel < currentNivel) newNivel = currentNivel;
-
-          await _supabase.from('pontuacoes').update({
-            'xp_total': newXp,
-            'nivel': newNivel,
-            'streak_atual': (currentScore['streak_atual'] as int) + 1,
-            'streak_maximo': (currentScore['streak_maximo'] as int) > currentScore['streak_atual']
-                ? currentScore['streak_maximo']
-                : (currentScore['streak_atual'] as int) + 1
-          }).eq('usuario_id', colabId);
-        }
+        // Increment user's global score / XP via provider
+        await profileProvider.addXp(_score, isMock);
+      } else {
+        // In mock mode, we award score to profile provider
+        await profileProvider.addXp(_score, isMock);
       }
     } catch (e) {
       print('Erro ao salvar finalização no banco: $e');

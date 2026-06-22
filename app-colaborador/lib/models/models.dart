@@ -7,6 +7,8 @@ class Colaborador {
   final bool ativo;
   final bool primeiroAcesso;
   final String? empresaId;
+  final int metaDiaria;
+  final bool metaDiariaDefinida;
 
   Colaborador({
     required this.id,
@@ -17,6 +19,8 @@ class Colaborador {
     required this.ativo,
     required this.primeiroAcesso,
     this.empresaId,
+    this.metaDiaria = 10,
+    this.metaDiariaDefinida = false,
   });
 
   factory Colaborador.fromJson(Map<String, dynamic> json) {
@@ -29,6 +33,8 @@ class Colaborador {
       ativo: json['ativo'] as bool? ?? true,
       primeiroAcesso: json['primeiro_acesso'] as bool? ?? true,
       empresaId: json['empresa_id'] as String?,
+      metaDiaria: json['meta_diaria'] as int? ?? 10,
+      metaDiariaDefinida: json['meta_diaria_definida'] as bool? ?? false,
     );
   }
 }
@@ -120,6 +126,7 @@ class Pergunta {
   final String alternativaC;
   final String alternativaD;
   final String respostaCorreta; // 'A', 'B', 'C', 'D'
+  final String? explicacao;
 
   Pergunta({
     required this.id,
@@ -130,6 +137,7 @@ class Pergunta {
     required this.alternativaC,
     required this.alternativaD,
     required this.respostaCorreta,
+    this.explicacao,
   });
 
   factory Pergunta.fromJson(Map<String, dynamic> json) {
@@ -142,6 +150,7 @@ class Pergunta {
       alternativaC: json['alternativa_c'] as String,
       alternativaD: json['alternativa_d'] as String,
       respostaCorreta: json['resposta_correta'] as String,
+      explicacao: json['explicacao'] as String?,
     );
   }
 }

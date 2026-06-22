@@ -75,6 +75,7 @@ class PerguntaBulkItem(BaseModel):
     alternativa_c: str
     alternativa_d: str
     resposta_correta: str
+    explicacao: Optional[str] = None
 
 class PerguntaBulkRequest(BaseModel):
     perguntas: List[PerguntaBulkItem]
@@ -361,7 +362,8 @@ def import_perguntas_bulk(desafio_id: str, request: PerguntaBulkRequest):
                 "alternativa_b": p.alternativa_b.strip(),
                 "alternativa_c": p.alternativa_c.strip(),
                 "alternativa_d": p.alternativa_d.strip(),
-                "resposta_correta": resposta
+                "resposta_correta": resposta,
+                "explicacao": p.explicacao.strip() if p.explicacao else None
             })
         
         if not perguntas_to_insert:
@@ -415,7 +417,8 @@ Retorne um array JSON no formato exato:
     "alternativa_c": "Texto da alternativa C",
     "alternativa_d": "Texto da alternativa D",
     "resposta_correta": "A",
-    "dificuldade": "{request.dificuldade}"
+    "dificuldade": "{request.dificuldade}",
+    "explicacao": "Explicação curta sobre por que a alternativa A é a correta."
   }}
 ]
 
@@ -423,6 +426,7 @@ Regras importantes:
 - Cada pergunta deve ter exatamente 4 alternativas (alternativa_a, alternativa_b, alternativa_c, alternativa_d).
 - A chave "resposta_correta" deve ser estritamente uma única letra maiúscula entre 'A', 'B', 'C' ou 'D'.
 - O campo "dificuldade" de cada item deve ser exatamente "{request.dificuldade}".
+- O campo "explicacao" deve conter uma breve explicação fundamentada de por que a resposta é a correta.
 - Não retorne nenhum outro texto explicativo antes ou depois do JSON. Retorne apenas o array JSON puro.
 - Idioma: Português (Brasil).
 """

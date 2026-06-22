@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 
 class ProfileProvider extends ChangeNotifier {
@@ -10,12 +11,31 @@ class ProfileProvider extends ChangeNotifier {
   List<String> _unlockedConquistasIds = [];
   List<RankingColaborador> _rankingGeral = [];
   bool _loading = false;
+  bool _isMock = false;
+
+  // Gamification state
+  int _dailyGoalMinutes = 10;
+  double _dailyPlayTimeMinutes = 0.0;
+  bool _hasOnboardedGoal = false;
+  int _streakFreezeCount = 1;
+  bool _isStreakFreezeActive = false;
+  bool _playedToday = false;
+  bool _shouldShowConfetti = false;
 
   Pontuacao? get pontuacao => _pontuacao;
   List<Conquista> get conquistas => _conquistas;
   List<String> get unlockedConquistasIds => _unlockedConquistasIds;
   List<RankingColaborador> get rankingGeral => _rankingGeral;
   bool get loading => _loading;
+  bool get isMock => _isMock;
+
+  int get dailyGoalMinutes => _dailyGoalMinutes;
+  double get dailyPlayTimeMinutes => _dailyPlayTimeMinutes;
+  bool get hasOnboardedGoal => _hasOnboardedGoal;
+  int get streakFreezeCount => _streakFreezeCount;
+  bool get isStreakFreezeActive => _isStreakFreezeActive;
+  bool get playedToday => _playedToday;
+  bool get shouldShowConfetti => _shouldShowConfetti;
 
   Future<void> loadProfileData(String colabId, String companyId, bool isMock) async {
     _loading = true;
@@ -101,11 +121,265 @@ class ProfileProvider extends ChangeNotifier {
           _rankingGeral = (rankingRes as List).map((r) => RankingColaborador.fromJson(r)).toList();
         }
       }
+
+      // Fetch user meta_diaria preferences directly from usuarios table
+      int dbMeta = 10;
+      bool dbDefinida = false;
+      if (!isMock) {
+        try {
+          final userRes = await _supabase
+              .from('usuarios')
+              .select('meta_diaria, meta_diaria_definida')
+              .eq('id', colabId)
+              .maybeSingle();
+          if (userRes != null) {
+            dbMeta = userRes['meta_diaria'] as int? ?? 10;
+            dbDefinida = userRes['meta_diaria_definida'] as bool? ?? false;
+          }
+        } catch (dbErr) {
+          print('Erro ao carregar meta_diaria do banco: $dbErr');
+        }
+      }
+
+      // Load SharedPreferences data for Gamification
+      final prefs = await SharedPreferences.getInstance();
+      if (!isMock && dbDefinida) {
+        _dailyGoalMinutes = dbMeta;
+        _hasOnboardedGoal = true;
+        await prefs.setInt('daily_goal_minutes_$colabId', dbMeta);
+        await prefs.setBool('has_onboarded_goal_$colabId', true);
+      } else {
+        _dailyGoalMinutes = prefs.getInt('daily_goal_minutes_$colabId') ?? 10;
+        _hasOnboardedGoal = prefs.getBool('has_onboarded_goal_$colabId') ?? false;
+      }
+      _dailyPlayTimeMinutes = prefs.getDouble('daily_play_time_$colabId') ?? 0.0;
+      _streakFreezeCount = prefs.getInt('streak_freeze_count_$colabId') ?? 1;
+      _isStreakFreezeActive = prefs.getBool('is_streak_freeze_active_$colabId') ?? false;
+
+      // Check if day changed
+      final lastPlayStr = prefs.getString('last_play_date_$colabId');
+      if (lastPlayStr != null) {
+        final lastPlayDate = DateTime.parse(lastPlayStr);
+        final now = DateTime.now();
+        if (lastPlayDate.year != now.year || lastPlayDate.month != now.month || lastPlayDate.day != now.day) {
+          // New day!
+          _playedToday = false;
+          _dailyPlayTimeMinutes = 0.0;
+          await prefs.setDouble('daily_play_time_$colabId', 0.0);
+
+          // If more than 1 day difference (i.e. did not play yesterday)
+          final yesterday = DateTime(now.year, now.month, now.day - 1);
+          final didPlayYesterday = lastPlayDate.year == yesterday.year &&
+                                   lastPlayDate.month == yesterday.month &&
+                                   lastPlayDate.day == yesterday.day;
+          
+          if (!didPlayYesterday) {
+            // Missed streak! Let's check if Streak Freeze protects it
+            if (_streakFreezeCount > 0 && _isStreakFreezeActive) {
+              _streakFreezeCount--;
+              _isStreakFreezeActive = false;
+              await prefs.setInt('streak_freeze_count_$colabId', _streakFreezeCount);
+              await prefs.setBool('is_streak_freeze_active_$colabId', false);
+            } else {
+              // Streak is lost
+              if (_pontuacao != null) {
+                _pontuacao = Pontuacao(
+                  id: _pontuacao!.id,
+                  usuarioId: _pontuacao!.usuarioId,
+                  xpTotal: _pontuacao!.xpTotal,
+                  nivel: _pontuacao!.nivel,
+                  streakAtual: 0,
+                  streakMaximo: _pontuacao!.streakMaximo,
+                );
+              }
+              if (!isMock) {
+                await _supabase.from('pontuacoes').update({'streak_atual': 0}).eq('usuario_id', colabId);
+              }
+            }
+          }
+        } else {
+          _playedToday = true;
+        }
+      } else {
+        _playedToday = false;
+      }
     } catch (e) {
       print('Erro ao carregar dados de perfil: $e');
     } finally {
       _loading = false;
       notifyListeners();
+    }
+  }
+
+  // Update Daily Goal
+  Future<void> updateDailyGoal(int minutes) async {
+    _dailyGoalMinutes = minutes;
+    _hasOnboardedGoal = true;
+    notifyListeners();
+
+    final colabId = _pontuacao?.usuarioId;
+    if (colabId == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('daily_goal_minutes_$colabId', minutes);
+      await prefs.setBool('has_onboarded_goal_$colabId', true);
+
+      if (!_isMock) {
+        await _supabase.from('usuarios').update({
+          'meta_diaria': minutes,
+          'meta_diaria_definida': true
+        }).eq('id', colabId);
+      }
+    } catch (e) {
+      print('Erro ao salvar meta diária: $e');
+    }
+  }
+
+  // Add study playtime minutes
+  Future<void> addPlayTime(double minutes, bool isMock) async {
+    if (_pontuacao == null) return;
+    final colabId = _pontuacao!.usuarioId;
+    final oldTime = _dailyPlayTimeMinutes;
+    _dailyPlayTimeMinutes += minutes;
+    _playedToday = true;
+
+    // Check if goal just completed
+    if (oldTime < _dailyGoalMinutes && _dailyPlayTimeMinutes >= _dailyGoalMinutes) {
+      _shouldShowConfetti = true;
+      // Award 100 extra XP for hitting daily goal!
+      await addXp(100, isMock);
+    }
+
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('daily_play_time_$colabId', _dailyPlayTimeMinutes);
+      await prefs.setString('last_play_date_$colabId', DateTime.now().toIso8601String());
+    } catch (e) {
+      print('Erro ao salvar playtime: $e');
+    }
+  }
+
+  void consumeConfetti() {
+    _shouldShowConfetti = false;
+    notifyListeners();
+  }
+
+  Future<void> addXp(int xp, bool isMock) async {
+    if (_pontuacao == null) return;
+    int newXp = _pontuacao!.xpTotal + xp;
+    int currentNivel = _pontuacao!.nivel;
+    int newNivel = (newXp ~/ 500) + 1;
+    if (newNivel < currentNivel) newNivel = currentNivel;
+
+    _pontuacao = Pontuacao(
+      id: _pontuacao!.id,
+      usuarioId: _pontuacao!.usuarioId,
+      xpTotal: newXp,
+      nivel: newNivel,
+      streakAtual: _pontuacao!.streakAtual,
+      streakMaximo: _pontuacao!.streakMaximo,
+    );
+    notifyListeners();
+
+    if (!isMock) {
+      try {
+        await _supabase.from('pontuacoes').update({
+          'xp_total': newXp,
+          'nivel': newNivel,
+        }).eq('usuario_id', _pontuacao!.usuarioId);
+      } catch (e) {
+        print('Erro ao atualizar XP: $e');
+      }
+    }
+  }
+
+  // Buy a Streak Freeze using 300 XP
+  Future<bool> buyStreakFreeze(bool isMock) async {
+    if (_pontuacao == null || _pontuacao!.xpTotal < 300) return false;
+
+    int newXp = _pontuacao!.xpTotal - 300;
+    _pontuacao = Pontuacao(
+      id: _pontuacao!.id,
+      usuarioId: _pontuacao!.usuarioId,
+      xpTotal: newXp,
+      nivel: _pontuacao!.nivel,
+      streakAtual: _pontuacao!.streakAtual,
+      streakMaximo: _pontuacao!.streakMaximo,
+    );
+
+    _streakFreezeCount++;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final colabId = _pontuacao!.usuarioId;
+      await prefs.setInt('streak_freeze_count_$colabId', _streakFreezeCount);
+
+      if (!isMock) {
+        await _supabase.from('pontuacoes').update({
+          'xp_total': newXp,
+        }).eq('usuario_id', colabId);
+      }
+      return true;
+    } catch (e) {
+      print('Erro ao comprar streak freeze: $e');
+      return false;
+    }
+  }
+
+  // Toggle Streak Freeze Activation
+  Future<void> toggleStreakFreezeActive() async {
+    if (_streakFreezeCount <= 0 && !_isStreakFreezeActive) return;
+
+    _isStreakFreezeActive = !_isStreakFreezeActive;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final colabId = _pontuacao?.usuarioId ?? 'default';
+      await prefs.setBool('is_streak_freeze_active_$colabId', _isStreakFreezeActive);
+    } catch (e) {
+      print('Erro ao ativar/desativar streak freeze: $e');
+    }
+  }
+
+  // Increment Streak when a quiz is completed
+  Future<void> incrementStreak(bool isMock) async {
+    if (_pontuacao == null) return;
+    final colabId = _pontuacao!.usuarioId;
+    
+    // Only increment once a day
+    if (!_playedToday) {
+      int newStreak = _pontuacao!.streakAtual + 1;
+      int newMax = newStreak > _pontuacao!.streakMaximo ? newStreak : _pontuacao!.streakMaximo;
+
+      _pontuacao = Pontuacao(
+        id: _pontuacao!.id,
+        usuarioId: _pontuacao!.usuarioId,
+        xpTotal: _pontuacao!.xpTotal,
+        nivel: _pontuacao!.nivel,
+        streakAtual: newStreak,
+        streakMaximo: newMax,
+      );
+      _playedToday = true;
+      notifyListeners();
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('last_play_date_$colabId', DateTime.now().toIso8601String());
+
+        if (!isMock) {
+          await _supabase.from('pontuacoes').update({
+            'streak_atual': newStreak,
+            'streak_maximo': newMax
+          }).eq('usuario_id', colabId);
+        }
+      } catch (e) {
+        print('Erro ao atualizar streak no banco: $e');
+      }
     }
   }
 

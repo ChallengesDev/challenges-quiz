@@ -10,6 +10,7 @@ import 'screens/home_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'screens/result_screen.dart';
 import 'screens/notifications_screen.dart';
+import 'screens/streak_freeze_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,6 +84,7 @@ class MyApp extends StatelessWidget {
           '/quiz': (context) => const QuizScreen(),
           '/result': (context) => const ResultScreen(),
           '/notifications': (context) => const NotificationsScreen(),
+          '/streak_freeze': (context) => const StreakFreezeScreen(),
         },
       ),
     );
