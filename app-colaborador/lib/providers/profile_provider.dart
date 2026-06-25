@@ -12,6 +12,7 @@ class ProfileProvider extends ChangeNotifier {
   List<RankingColaborador> _rankingGeral = [];
   bool _loading = false;
   bool _isMock = false;
+  List<String> _completedDesafioIds = [];
 
   // Gamification state
   int _dailyGoalMinutes = 10;
@@ -21,6 +22,13 @@ class ProfileProvider extends ChangeNotifier {
   bool _isStreakFreezeActive = false;
   bool _playedToday = false;
   bool _shouldShowConfetti = false;
+  bool _dailyMissionCompleted = false;
+
+  final List<DailyMission> _availableMissions = [
+    DailyMission(id: 'm1', titulo: 'Super Combo', descricao: 'Acerte 3 perguntas seguidas'),
+    DailyMission(id: 'm2', titulo: 'Foco Total', descricao: 'Responda a todas as perguntas de um quiz sem errar'),
+    DailyMission(id: 'm3', titulo: 'Super Velocidade', descricao: 'Complete um desafio em menos de 3 minutos'),
+  ];
 
   Pontuacao? get pontuacao => _pontuacao;
   List<Conquista> get conquistas => _conquistas;
@@ -28,6 +36,7 @@ class ProfileProvider extends ChangeNotifier {
   List<RankingColaborador> get rankingGeral => _rankingGeral;
   bool get loading => _loading;
   bool get isMock => _isMock;
+  List<String> get completedDesafioIds => _completedDesafioIds;
 
   int get dailyGoalMinutes => _dailyGoalMinutes;
   double get dailyPlayTimeMinutes => _dailyPlayTimeMinutes;
@@ -36,6 +45,13 @@ class ProfileProvider extends ChangeNotifier {
   bool get isStreakFreezeActive => _isStreakFreezeActive;
   bool get playedToday => _playedToday;
   bool get shouldShowConfetti => _shouldShowConfetti;
+  bool get dailyMissionCompleted => _dailyMissionCompleted;
+
+  DailyMission get activeMission {
+    final now = DateTime.now();
+    final index = (now.year + now.month + now.day) % _availableMissions.length;
+    return _availableMissions[index];
+  }
 
   Future<void> loadProfileData(String colabId, String companyId, bool isMock) async {
     _loading = true;
@@ -143,6 +159,28 @@ class ProfileProvider extends ChangeNotifier {
 
       // Load SharedPreferences data for Gamification
       final prefs = await SharedPreferences.getInstance();
+
+      // Load completed challenges
+      if (isMock) {
+        _completedDesafioIds = prefs.getStringList('completed_desafios_$colabId') ?? ['chal-1', 'chal-5'];
+      } else {
+        try {
+          final sessoesRes = await _supabase
+              .from('sessoes')
+              .select('desafio_id')
+              .eq('usuario_id', colabId)
+              .eq('concluido', true);
+          if (sessoesRes != null) {
+            _completedDesafioIds = (sessoesRes as List)
+                .map((s) => s['desafio_id'] as String)
+                .toSet()
+                .toList();
+          }
+        } catch (dbErr) {
+          print('Erro ao carregar desafios concluidos do banco: $dbErr');
+          _completedDesafioIds = prefs.getStringList('completed_desafios_$colabId') ?? [];
+        }
+      }
       if (!isMock && dbDefinida) {
         _dailyGoalMinutes = dbMeta;
         _hasOnboardedGoal = true;
@@ -156,16 +194,21 @@ class ProfileProvider extends ChangeNotifier {
       _streakFreezeCount = prefs.getInt('streak_freeze_count_$colabId') ?? 1;
       _isStreakFreezeActive = prefs.getBool('is_streak_freeze_active_$colabId') ?? false;
 
+      final now = DateTime.now();
+      final todayStr = "${now.year}-${now.month}-${now.day}";
+      _dailyMissionCompleted = prefs.getBool('daily_mission_completed_${colabId}_$todayStr') ?? false;
+
       // Check if day changed
       final lastPlayStr = prefs.getString('last_play_date_$colabId');
       if (lastPlayStr != null) {
         final lastPlayDate = DateTime.parse(lastPlayStr);
-        final now = DateTime.now();
         if (lastPlayDate.year != now.year || lastPlayDate.month != now.month || lastPlayDate.day != now.day) {
           // New day!
           _playedToday = false;
           _dailyPlayTimeMinutes = 0.0;
+          _dailyMissionCompleted = false;
           await prefs.setDouble('daily_play_time_$colabId', 0.0);
+          await prefs.setBool('daily_mission_completed_${colabId}_$todayStr', false);
 
           // If more than 1 day difference (i.e. did not play yesterday)
           final yesterday = DateTime(now.year, now.month, now.day - 1);
@@ -208,6 +251,25 @@ class ProfileProvider extends ChangeNotifier {
     } finally {
       _loading = false;
       notifyListeners();
+    }
+  }
+
+  // Complete Daily Mission
+  Future<void> completeDailyMission(String colabId, bool isMock) async {
+    if (_dailyMissionCompleted) return;
+    _dailyMissionCompleted = true;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now();
+      final todayStr = "${now.year}-${now.month}-${now.day}";
+      await prefs.setBool('daily_mission_completed_${colabId}_$todayStr', true);
+      
+      // Award 100 XP
+      await addXp(activeMission.xpReward, isMock);
+    } catch (e) {
+      print('Erro ao completar missão diária: $e');
     }
   }
 
@@ -400,6 +462,21 @@ class ProfileProvider extends ChangeNotifier {
       }
     } catch (e) {
       print('Erro ao registrar conquista desbloqueada: $e');
+    }
+  }
+
+  // Mark Desafio Completed
+  Future<void> markDesafioCompleted(String desafioId, bool isMock) async {
+    if (_completedDesafioIds.contains(desafioId)) return;
+    _completedDesafioIds.add(desafioId);
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final colabId = _pontuacao?.usuarioId ?? 'default';
+      await prefs.setStringList('completed_desafios_$colabId', _completedDesafioIds);
+    } catch (e) {
+      print('Erro ao marcar desafio como concluído: $e');
     }
   }
 }

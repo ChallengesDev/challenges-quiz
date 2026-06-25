@@ -14,22 +14,23 @@ class AchievementsScreen extends StatelessWidget {
     final unlockedIds = profileProvider.unlockedConquistasIds;
 
     return Scaffold(
-      backgroundColor: const Color(0xff0b0f19),
+      backgroundColor: const Color(0xffFAF9F6),
       appBar: AppBar(
-        backgroundColor: const Color(0xff0b0f19),
+        backgroundColor: const Color(0xffFAF9F6),
         elevation: 0,
         title: const Text(
           'Minhas Insígnias',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Outfit'),
         ),
         centerTitle: false,
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xff00f5d4))))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xff6B5FD3)))
           : conquistas.isEmpty
               ? _buildEmptyState()
               : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -41,9 +42,10 @@ class AchievementsScreen extends StatelessWidget {
                       const Text(
                         'Galeria de Medalhas',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Color(0xff2D2D3A),
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
+                          fontFamily: 'Outfit',
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -59,8 +61,8 @@ class AchievementsScreen extends StatelessWidget {
                             itemCount: conquistas.length,
                             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
                               childAspectRatio: 0.82,
                             ),
                             itemBuilder: (context, index) {
@@ -83,15 +85,15 @@ class AchievementsScreen extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xff6c5ce7), Color(0xff4834d4)],
+          colors: [Color(0xff6B5FD3), Color(0xff3B7DD8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xff6c5ce7).withOpacity(0.3),
-            blurRadius: 15,
+            color: const Color(0xff6B5FD3).withOpacity(0.2),
+            blurRadius: 12,
             offset: const Offset(0, 5),
           )
         ],
@@ -109,7 +111,7 @@ class AchievementsScreen extends StatelessWidget {
                   value: progress,
                   strokeWidth: 8,
                   backgroundColor: Colors.white24,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xff00f5d4)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ),
               Text(
@@ -118,6 +120,7 @@ class AchievementsScreen extends StatelessWidget {
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
+                  fontFamily: 'Outfit',
                 ),
               ),
             ],
@@ -133,13 +136,14 @@ class AchievementsScreen extends StatelessWidget {
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
+                    fontFamily: 'Outfit',
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Você desbloqueou $unlocked de $total conquistas disponíveis.',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.87),
+                    color: Colors.white.withOpacity(0.9),
                     fontSize: 13,
                     height: 1.3,
                   ),
@@ -163,40 +167,38 @@ class AchievementsScreen extends StatelessWidget {
 
     return InkWell(
       onTap: () => _showAchievementDetail(context, displayName, displayDesc, displayIcon, isUnlocked, isSecret),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xff151c2c),
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isUnlocked ? const Color(0xff6c5ce7).withOpacity(0.5) : const Color(0xff243049),
+            color: isUnlocked ? const Color(0xff6B5FD3).withOpacity(0.4) : const Color(0xffE2E2E6),
             width: 1.5,
           ),
-          boxShadow: isUnlocked
-              ? [
-                  BoxShadow(
-                    color: const Color(0xff6c5ce7).withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  )
-                ]
-              : null,
+          boxShadow: [
+            BoxShadow(
+              color: isUnlocked ? const Color(0xff6B5FD3).withOpacity(0.04) : Colors.black.withOpacity(0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            )
+          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Badge Icon Area
             Container(
-              width: 64,
-              height: 64,
+              width: 60,
+              height: 60,
               decoration: BoxDecoration(
                 color: isUnlocked
-                    ? const Color(0xff6c5ce7).withOpacity(0.15)
-                    : const Color(0xff0b0f19),
+                    ? const Color(0xff6B5FD3).withOpacity(0.08)
+                    : const Color(0xffFAF9F6),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isUnlocked ? const Color(0xff6c5ce7) : const Color(0xff243049),
+                  color: isUnlocked ? const Color(0xff6B5FD3) : const Color(0xffE2E2E6),
                   width: 1.5,
                 ),
               ),
@@ -204,13 +206,13 @@ class AchievementsScreen extends StatelessWidget {
                 child: Text(
                   displayIcon,
                   style: TextStyle(
-                    fontSize: 32,
-                    color: isUnlocked ? null : Colors.grey.withOpacity(0.4),
+                    fontSize: 28,
+                    color: isUnlocked ? null : Colors.grey.withOpacity(0.5),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             // Title
             Text(
               displayName,
@@ -218,7 +220,7 @@ class AchievementsScreen extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: isUnlocked ? Colors.white : Colors.white54,
+                color: isUnlocked ? const Color(0xff2D2D3A) : const Color(0xff6B6B76),
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
               ),
@@ -232,18 +234,18 @@ class AchievementsScreen extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isUnlocked ? Colors.white60 : Colors.white30,
+                  color: isUnlocked ? const Color(0xff6B6B76) : const Color(0xff6B6B76).withOpacity(0.7),
                   fontSize: 10,
                   height: 1.3,
                 ),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             // Unlocked indicator
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: isUnlocked ? const Color(0xff00f5d4).withOpacity(0.1) : Colors.transparent,
+                color: isUnlocked ? const Color(0xff3B7DD8).withOpacity(0.1) : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -251,14 +253,14 @@ class AchievementsScreen extends StatelessWidget {
                 children: [
                   Icon(
                     isUnlocked ? Icons.check_circle : Icons.lock_outline,
-                    color: isUnlocked ? const Color(0xff00f5d4) : Colors.white30,
+                    color: isUnlocked ? const Color(0xff3B7DD8) : const Color(0xff6B6B76),
                     size: 10,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     isUnlocked ? 'Desbloqueada' : 'Bloqueada',
                     style: TextStyle(
-                      color: isUnlocked ? const Color(0xff00f5d4) : Colors.white30,
+                      color: isUnlocked ? const Color(0xff3B7DD8) : const Color(0xff6B6B76),
                       fontSize: 8,
                       fontWeight: FontWeight.bold,
                     ),
@@ -284,7 +286,7 @@ class AchievementsScreen extends StatelessWidget {
       context: context,
       builder: (context) {
         return Dialog(
-          backgroundColor: const Color(0xff151c2c),
+          backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -296,10 +298,10 @@ class AchievementsScreen extends StatelessWidget {
                   width: 90,
                   height: 90,
                   decoration: BoxDecoration(
-                    color: isUnlocked ? const Color(0xff6c5ce7).withOpacity(0.2) : const Color(0xff0b0f19),
+                    color: isUnlocked ? const Color(0xff6B5FD3).withOpacity(0.1) : const Color(0xffFAF9F6),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: isUnlocked ? const Color(0xff6c5ce7) : const Color(0xff243049),
+                      color: isUnlocked ? const Color(0xff6B5FD3) : const Color(0xffE2E2E6),
                       width: 2.5,
                     ),
                   ),
@@ -316,7 +318,7 @@ class AchievementsScreen extends StatelessWidget {
                   name,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: Color(0xff2D2D3A),
                     fontWeight: FontWeight.bold,
                     fontSize: 20,
                   ),
@@ -327,17 +329,17 @@ class AchievementsScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: isUnlocked
-                        ? const Color(0xff00f5d4).withOpacity(0.15)
-                        : Colors.white.withOpacity(0.05),
+                        ? const Color(0xff3B7DD8).withOpacity(0.1)
+                        : const Color(0xffFAF9F6),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isUnlocked ? const Color(0xff00f5d4) : Colors.white24,
+                      color: isUnlocked ? const Color(0xff3B7DD8) : const Color(0xffE2E2E6),
                     ),
                   ),
                   child: Text(
                     isUnlocked ? 'DESBLOQUEADA' : 'BLOQUEADA',
                     style: TextStyle(
-                      color: isUnlocked ? const Color(0xff00f5d4) : Colors.white54,
+                      color: isUnlocked ? const Color(0xff3B7DD8) : const Color(0xff6B6B76),
                       fontWeight: FontWeight.bold,
                       fontSize: 10,
                       letterSpacing: 1.2,
@@ -350,7 +352,7 @@ class AchievementsScreen extends StatelessWidget {
                   description,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Colors.white70,
+                    color: Color(0xff6B6B76),
                     fontSize: 14,
                     height: 1.4,
                   ),
@@ -361,8 +363,9 @@ class AchievementsScreen extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isUnlocked ? const Color(0xff6c5ce7) : const Color(0xff243049),
-                      foregroundColor: Colors.white,
+                      backgroundColor: isUnlocked ? const Color(0xff6B5FD3) : const Color(0xffE2E2E6),
+                      foregroundColor: isUnlocked ? Colors.white : const Color(0xff6B6B76),
+                      elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -385,17 +388,17 @@ class AchievementsScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.stars_outlined, color: Colors.white.withOpacity(0.1), size: 80),
+            Icon(Icons.stars_outlined, color: const Color(0xffE2E2E6), size: 80),
             const SizedBox(height: 16),
             const Text(
               'Nenhuma insígnia encontrada',
-              style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Color(0xff2D2D3A), fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
               'As conquistas da empresa serão carregadas aqui.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white30, fontSize: 13),
+              style: TextStyle(color: Color(0xff6B6B76), fontSize: 13),
             ),
           ],
         ),

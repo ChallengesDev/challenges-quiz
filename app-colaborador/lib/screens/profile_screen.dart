@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../models/models.dart';
+import '../utils/image_picker_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Colaborador colab;
@@ -31,6 +34,103 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _pickAndUploadPhoto(BuildContext context) async {
+    try {
+      final picked = await pickImageHelper();
+      if (picked == null) return;
+
+      // 1. Format validation (JPG, JPEG, PNG)
+      final ext = picked.name.split('.').last.toLowerCase();
+      if (ext != 'png' && ext != 'jpg' && ext != 'jpeg') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.redAccent,
+              content: Text('Formato inválido. Apenas JPG, JPEG e PNG são aceitos.', style: TextStyle(color: Colors.white)),
+            ),
+          );
+        }
+        return;
+      }
+
+      // 2. Size validation (< 5MB)
+      final double sizeInMb = picked.size / (1024 * 1024);
+      if (sizeInMb > 5.0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.redAccent,
+              content: Text('A imagem deve ser menor do que 5MB.', style: TextStyle(color: Colors.white)),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xff6B5FD3),
+            content: Text('Enviando foto de perfil...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      String? uploadedUrl;
+
+      if (widget.isMock) {
+        // In mock mode, encode as base64 data URL
+        final base64String = base64Encode(picked.bytes);
+        uploadedUrl = 'data:image/$ext;base64,$base64String';
+      } else {
+        try {
+          // Upload directly to Supabase Storage Bucket 'avatars'
+          final supabase = Supabase.instance.client;
+          final path = '${widget.colab.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';
+          
+          await supabase.storage.from('avatars').uploadBinary(
+            path,
+            picked.bytes,
+            fileOptions: FileOptions(
+              contentType: 'image/$ext',
+              upsert: true,
+            ),
+          );
+          uploadedUrl = supabase.storage.from('avatars').getPublicUrl(path);
+        } catch (storageErr) {
+          print('Erro no Supabase Storage: $storageErr. Usando base64 fallback.');
+          // Fallback to base64 Data URL if bucket is missing or connection fails
+          final base64String = base64Encode(picked.bytes);
+          uploadedUrl = 'data:image/$ext;base64,$base64String';
+        }
+      }
+
+      // Update in auth provider
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.updateProfilePicture(uploadedUrl);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('Foto de perfil atualizada com sucesso!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Erro ao escolher ou fazer upload da foto: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text('Erro ao atualizar foto: $e'),
+          ),
+        );
+      }
+    }
+  }
+
   void _showChangePasswordDialog(BuildContext context) {
     _passwordController.clear();
     showDialog(
@@ -39,9 +139,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              backgroundColor: const Color(0xff151c2c),
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text('Alterar Senha', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              title: const Text('Alterar Senha', style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold)),
               content: Form(
                 key: _formKey,
                 child: Column(
@@ -49,22 +149,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     const Text(
                       'Sua nova senha deve conter pelo menos 6 caracteres.',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                      style: TextStyle(color: Color(0xff6B6B76), fontSize: 13),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _passwordController,
                       obscureText: true,
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: Color(0xff2D2D3A)),
                       decoration: InputDecoration(
                         labelText: 'Nova Senha',
-                        labelStyle: const TextStyle(color: Colors.white70),
+                        labelStyle: const TextStyle(color: Color(0xff6B6B76)),
                         enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: Color(0xff243049)),
+                          borderSide: const BorderSide(color: Color(0xffE2E2E6)),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: Color(0xff6c5ce7)),
+                          borderSide: const BorderSide(color: Color(0xff6B5FD3)),
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
@@ -84,11 +184,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                  child: const Text('Cancelar', style: TextStyle(color: Color(0xff6B6B76))),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xff6c5ce7),
+                    backgroundColor: const Color(0xff6B5FD3),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   onPressed: _isResetting
@@ -110,12 +210,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Navigator.of(context).pop();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  backgroundColor: success ? const Color(0xff00f5d4) : Colors.redAccent,
+                                  backgroundColor: success ? Colors.green : Colors.redAccent,
                                   content: Text(
                                     success
                                         ? 'Senha redefinida com sucesso!'
                                         : 'Erro ao redefinir a senha. Tente novamente.',
-                                    style: TextStyle(color: success ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               );
@@ -139,17 +239,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xff151c2c),
+          backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Sair do Aplicativo', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: const Text('Sair do Aplicativo', style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold)),
           content: const Text(
             'Tem certeza que deseja encerrar a sua sessão?',
-            style: TextStyle(color: Colors.white70),
+            style: TextStyle(color: Color(0xff6B6B76)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+              child: const Text('Cancelar', style: TextStyle(color: Color(0xff6B6B76))),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -175,17 +275,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final totalAchievements = profileProvider.conquistas.length;
     final unlockedAchievements = profileProvider.unlockedConquistasIds.length;
 
-    // Custom personal integrity indicators (mocked/calculated based on isMock or default database entries)
-    // In a production setup, we can calculate this as: 100 - (number of fraud infractions * 5)
-    // Let's create a realistic mock representation for a gamified feel.
     final int mockIntegrityScore = widget.isMock ? 98 : 100;
     final int mockExits = widget.isMock ? 2 : 0;
     final int mockSpeedClicks = widget.isMock ? 0 : 0;
     final int mockGazeDrifts = widget.isMock ? 1 : 0;
 
     return Scaffold(
-      backgroundColor: const Color(0xff0b0f19),
+      backgroundColor: const Color(0xffFAF9F6),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -194,49 +292,90 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Center(
               child: Column(
                 children: [
-                  Container(
-                    width: 90,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      color: const Color(0xff6c5ce7),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xff00f5d4), width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xff6c5ce7).withOpacity(0.3),
-                          blurRadius: 15,
+                  GestureDetector(
+                    onTap: () => _pickAndUploadPhoto(context),
+                    child: Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xff6B5FD3), width: 3),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              )
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: widget.colab.fotoUrl != null && widget.colab.fotoUrl!.isNotEmpty
+                                ? (widget.colab.fotoUrl!.startsWith('data:image')
+                                    ? Image.memory(
+                                        base64Decode(widget.colab.fotoUrl!.split(',')[1]),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, size: 50, color: Color(0xff6B6B76)),
+                                      )
+                                    : Image.network(
+                                        widget.colab.fotoUrl!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, size: 50, color: Color(0xff6B6B76)),
+                                      ))
+                                : Container(
+                                    color: const Color(0xff6B5FD3).withOpacity(0.1),
+                                    child: Center(
+                                      child: Text(
+                                        widget.colab.nome.substring(0, 1).toUpperCase(),
+                                        style: const TextStyle(
+                                          color: Color(0xff6B5FD3),
+                                          fontSize: 36,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: Color(0xff6B5FD3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ),
                       ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        widget.colab.nome.substring(0, 1).toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold),
-                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     widget.colab.nome,
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Color(0xff2D2D3A), fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     widget.colab.email,
-                    style: const TextStyle(color: Colors.white54, fontSize: 13),
+                    style: const TextStyle(color: Color(0xff6B6B76), fontSize: 13),
                   ),
                   if (widget.colab.cargo != null || widget.colab.departamento != null) ...[
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xff151c2c),
+                        color: const Color(0xff3B7DD8).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xff243049)),
+                        border: Border.all(color: const Color(0xff3B7DD8).withOpacity(0.3)),
                       ),
                       child: Text(
                         '${widget.colab.cargo ?? 'Colaborador'}  •  ${widget.colab.departamento ?? 'Geral'}',
-                        style: const TextStyle(color: Color(0xff00f5d4), fontSize: 11, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Color(0xff3B7DD8), fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ]
@@ -254,7 +393,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             // Statistics Grid Title
             const Text(
               'Suas Estatísticas',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 12),
 
@@ -271,13 +410,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   'Nível Atual',
                   '${widget.score?.nivel ?? 1}',
                   Icons.trending_up,
-                  const Color(0xff6c5ce7),
+                  const Color(0xff6B5FD3),
                 ),
                 _buildStatTile(
                   'XP Acumulado',
                   '${widget.score?.xpTotal ?? 0}',
                   Icons.bolt,
-                  const Color(0xff00f5d4),
+                  const Color(0xff3B7DD8),
                 ),
                 _buildStatTile(
                   'Streak Atual',
@@ -289,7 +428,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   'Recorde Streak',
                   '${widget.score?.streakMaximo ?? 0} dias',
                   Icons.workspace_premium,
-                  const Color(0xffffd700),
+                  const Color(0xffFFD700),
                 ),
               ],
             ),
@@ -297,42 +436,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
 
             // Achievements Card summary
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xff151c2c),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xff243049)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xff6c5ce7).withOpacity(0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.stars, color: Color(0xff6c5ce7), size: 24),
-                      ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Coleção de Insígnias', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$unlockedAchievements de $totalAchievements completadas',
-                            style: const TextStyle(color: Colors.white60, fontSize: 12),
+            GestureDetector(
+              onTap: () {
+                // Change current tab to achievements
+                // Since this screen is inside HomeScreen, the parent handles tabs,
+                // but we can at least show a visual click or let it stay static
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xffE2E2E6)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xff6B5FD3).withOpacity(0.1),
+                            shape: BoxShape.circle,
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const Icon(Icons.chevron_right, color: Colors.white30),
-                ],
+                          child: const Icon(Icons.stars, color: Color(0xff6B5FD3), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Coleção de Insígnias', style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 14)),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$unlockedAchievements de $totalAchievements completadas',
+                              style: const TextStyle(color: Color(0xff6B6B76), fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const Icon(Icons.chevron_right, color: Color(0xff6B6B76)),
+                  ],
+                ),
               ),
             ),
 
@@ -342,20 +495,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xff151c2c),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xff243049)),
+                border: Border.all(color: const Color(0xffE2E2E6)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  )
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.query_builder, color: Color(0xff00f5d4), size: 20),
+                      Icon(Icons.query_builder, color: Color(0xff3B7DD8), size: 20),
                       SizedBox(width: 8),
                       Text(
                         'Ajustar Meta Diária',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                     ],
                   ),
@@ -373,72 +533,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(height: 16),
-
-            // Streak Freeze Info
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xff151c2c),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xff243049)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.ac_unit, color: Colors.cyanAccent, size: 20),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Streak Freeze',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Possui ${profileProvider.streakFreezeCount} disponível(is) ${profileProvider.isStreakFreezeActive ? "(Equipado)" : ""}',
-                            style: const TextStyle(color: Colors.white60, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/streak_freeze');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xff6c5ce7).withOpacity(0.2),
-                      foregroundColor: const Color(0xff6c5ce7),
-                      side: const BorderSide(color: Color(0xff6c5ce7)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    child: const Text(
-                      'Ver Proteção',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
             const SizedBox(height: 32),
 
             // Actions Area
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xff151c2c),
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xff6B5FD3),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: Color(0xff243049)),
+                  side: const BorderSide(color: Color(0xffE2E2E6)),
                 ),
+                elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               icon: const Icon(Icons.lock_open, size: 18),
@@ -448,12 +554,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 12),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent.withOpacity(0.1),
+                backgroundColor: Colors.redAccent.withOpacity(0.05),
                 foregroundColor: Colors.redAccent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.redAccent.withOpacity(0.3)),
+                  side: BorderSide(color: Colors.redAccent.withOpacity(0.2)),
                 ),
+                elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               icon: const Icon(Icons.logout, size: 18),
@@ -471,9 +578,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xff151c2c),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xff243049)),
+        border: Border.all(color: const Color(0xffE2E2E6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,7 +602,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Color(0xff6B6B76), fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -496,7 +610,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 10),
           Text(
             value,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Color(0xff2D2D3A), fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -504,7 +618,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildIntegrityCard(int score, int exits, int gazeDrifts, int speedClicks) {
-    Color gaugeColor = const Color(0xff00f5d4); // neon green
+    Color gaugeColor = const Color(0xff3B7DD8);
     if (score < 80) {
       gaugeColor = Colors.orangeAccent;
     }
@@ -515,26 +629,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xff151c2c),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xff243049), width: 1.5),
+        border: Border.all(color: const Color(0xffE2E2E6), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.shield_outlined, color: Color(0xff00f5d4), size: 22),
+              const Icon(Icons.shield_outlined, color: Color(0xff6B5FD3), size: 22),
               const SizedBox(width: 8),
               const Text(
                 'Integridade nos Quizzes',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 15),
               ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: gaugeColor.withOpacity(0.15),
+                  color: gaugeColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -557,7 +678,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: CircularProgressIndicator(
                       value: score / 100,
                       strokeWidth: 6,
-                      backgroundColor: Colors.white10,
+                      backgroundColor: const Color(0xffFAF9F6),
                       valueColor: AlwaysStoppedAnimation<Color>(gaugeColor),
                     ),
                   ),
@@ -567,14 +688,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Text(
                         '$score%',
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: Color(0xff2D2D3A),
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const Text(
                         'Índice',
-                        style: TextStyle(color: Colors.white38, fontSize: 9),
+                        style: TextStyle(color: Color(0xff6B6B76), fontSize: 9),
                       )
                     ],
                   ),
@@ -587,12 +708,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     const Text(
                       'Sua nota de conformidade geral.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Color(0xff2D2D3A), fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'Trocar de abas, cliques ultrarrápidos ou desviar o olhar reduzem este índice.',
-                      style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.3),
+                      style: TextStyle(color: Color(0xff6B6B76), fontSize: 11, height: 1.3),
                     ),
                   ],
                 ),
@@ -600,11 +721,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          const Divider(color: Color(0xff243049)),
+          const Divider(color: Color(0xffE2E2E6)),
           const SizedBox(height: 8),
           const Text(
             'Histórico de Alertas Anti-Fraude:',
-            style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Color(0xff6B6B76), fontSize: 11, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Row(
@@ -624,12 +745,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+        Text(label, style: const TextStyle(color: Color(0xff6B6B76), fontSize: 10)),
         const SizedBox(height: 4),
         Text(
           count,
           style: TextStyle(
-            color: count == '0' ? Colors.white70 : Colors.orangeAccent,
+            color: count == '0' ? const Color(0xff2D2D3A) : Colors.orangeAccent,
             fontWeight: FontWeight.bold,
             fontSize: 14,
           ),
@@ -644,7 +765,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       label: Text(
         label,
         style: TextStyle(
-          color: isSelected ? Colors.black : Colors.white70,
+          color: isSelected ? Colors.white : const Color(0xff2D2D3A),
           fontWeight: FontWeight.bold,
           fontSize: 11,
         ),
@@ -655,11 +776,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profileProvider.updateDailyGoal(minutes);
         }
       },
-      selectedColor: const Color(0xff00f5d4),
-      backgroundColor: const Color(0xff0b0f19),
+      selectedColor: const Color(0xff6B5FD3),
+      backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: isSelected ? const Color(0xff00f5d4) : const Color(0xff243049)),
+        side: BorderSide(color: isSelected ? const Color(0xff6B5FD3) : const Color(0xffE2E2E6)),
       ),
     );
   }

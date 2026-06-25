@@ -24,6 +24,7 @@ class QuizProvider extends ChangeNotifier {
   // Timer variables
   int _timeLeft = 30; // 30s por pergunta
   Timer? _timer;
+  DateTime? _quizStartTime;
   
   // Anti-fraud stats
   int _screenExitsCount = 0;
@@ -62,7 +63,6 @@ class QuizProvider extends ChangeNotifier {
   bool? get isCorrectAnswer => _isCorrectAnswer;
   bool get showingFeedback => _showingFeedback;
 
-  // Initialize Quiz
   Future<void> startQuiz(Desafio desafio, String colabId, bool isMock) async {
     _loading = true;
     _currentDesafio = desafio;
@@ -78,6 +78,7 @@ class QuizProvider extends ChangeNotifier {
     _mascotState = 'idle';
     _isSuspiciousSpeed = false;
     _eyeDriftActive = false;
+    _quizStartTime = DateTime.now();
 
     _selectedAlternative = null;
     _isCorrectAnswer = null;
@@ -256,7 +257,6 @@ class QuizProvider extends ChangeNotifier {
     }
   }
 
-  // Finish Quiz flow
   Future<void> finishQuiz(String colabId, bool isMock, ProfileProvider profileProvider) async {
     _timer?.cancel();
     _quizConcluido = true;
@@ -270,6 +270,36 @@ class QuizProvider extends ChangeNotifier {
     // Add playtime: Let's assume 5 minutes spent on this quiz
     await profileProvider.addPlayTime(5.0, isMock);
     await profileProvider.incrementStreak(isMock);
+    if (_currentDesafio != null) {
+      await profileProvider.markDesafioCompleted(_currentDesafio!.id, isMock);
+    }
+
+    // Check Daily Mission completion criteria
+    final activeMission = profileProvider.activeMission;
+    bool missionMet = false;
+    if (activeMission.id == 'm1') {
+      // "Super Combo": Acerte 3 perguntas seguidas
+      if (_correctCount >= 3) {
+        missionMet = true;
+      }
+    } else if (activeMission.id == 'm2') {
+      // "Foco Total": Responda a todas as perguntas de um quiz sem errar
+      if (_correctCount == _perguntas.length && _perguntas.isNotEmpty) {
+        missionMet = true;
+      }
+    } else if (activeMission.id == 'm3') {
+      // "Super Velocidade": Complete um desafio em menos de 3 minutos
+      if (_quizStartTime != null) {
+        final elapsedSeconds = DateTime.now().difference(_quizStartTime!).inSeconds;
+        if (elapsedSeconds < 180) {
+          missionMet = true;
+        }
+      }
+    }
+
+    if (missionMet) {
+      await profileProvider.completeDailyMission(colabId, isMock);
+    }
 
     try {
       if (!isMock && _sessaoId != null) {

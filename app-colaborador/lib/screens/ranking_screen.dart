@@ -23,7 +23,7 @@ class _RankingScreenState extends State<RankingScreen> {
     final list = profileProvider.rankingGeral;
 
     if (profileProvider.loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: Color(0xff6B5FD3)));
     }
 
     // Filter simulation
@@ -32,7 +32,7 @@ class _RankingScreenState extends State<RankingScreen> {
         : list.where((u) => u.usuarioId == widget.colabId || u.usuarioId == '1' || u.usuarioId == '2').toList();
 
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -42,7 +42,7 @@ class _RankingScreenState extends State<RankingScreen> {
             children: [
               const Text(
                 'Líderes da Liga',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Outfit'),
+                style: TextStyle(color: Color(0xff2D2D3A), fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Outfit'),
               ),
               Row(
                 children: [
@@ -54,23 +54,23 @@ class _RankingScreenState extends State<RankingScreen> {
             ],
           ),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
           // Podium (1st, 2nd, 3rd places) if list has enough data
           if (displayList.length >= 3)
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              height: 170,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              height: 180,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   // 2nd Place (Silver)
-                  _buildPodiumPillar(displayList[1].nome, '2', const Color(0xffd1d5db), 90),
+                  _buildPodiumPillar(displayList[1].nome, '2', const Color(0xffC0C0C0), 95),
                   // 1st Place (Gold)
-                  _buildPodiumPillar(displayList[0].nome, '1', const Color(0xfff59e0b), 120, isWinner: true),
+                  _buildPodiumPillar(displayList[0].nome, '1', const Color(0xffFFD700), 125, isWinner: true),
                   // 3rd Place (Bronze)
-                  _buildPodiumPillar(displayList[2].nome, '3', const Color(0xffb45309), 75),
+                  _buildPodiumPillar(displayList[2].nome, '3', const Color(0xffCD7F32), 80),
                 ],
               ),
             ),
@@ -81,21 +81,34 @@ class _RankingScreenState extends State<RankingScreen> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xff151c2c),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xff243049)),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xffE2E2E6)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  )
+                ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 child: ListView.separated(
+                  physics: const BouncingScrollPhysics(),
                   itemCount: displayList.length,
-                  separatorBuilder: (context, index) => const Divider(color: Color(0xff243049), height: 1),
+                  separatorBuilder: (context, index) => const Divider(color: Color(0xffE2E2E6), height: 1),
                   itemBuilder: (context, index) {
                     final item = displayList[index];
                     final isUser = item.usuarioId == widget.colabId || item.nome.contains('Você');
 
+                    Color positionColor = const Color(0xff6B6B76);
+                    if (index == 0) positionColor = const Color(0xffFFD700);
+                    if (index == 1) positionColor = const Color(0xffC0C0C0);
+                    if (index == 2) positionColor = const Color(0xffCD7F32);
+
                     return Container(
-                      color: isUser ? const Color(0xff6c5ce7).withOpacity(0.08) : Colors.transparent,
+                      color: isUser ? const Color(0xff6B5FD3).withOpacity(0.06) : Colors.transparent,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       child: Row(
                         children: [
@@ -105,9 +118,7 @@ class _RankingScreenState extends State<RankingScreen> {
                             child: Text(
                               '#${index + 1}',
                               style: TextStyle(
-                                color: index == 0 
-                                    ? const Color(0xffffd700) 
-                                    : (index == 1 ? Colors.grey : (index == 2 ? Colors.brown : Colors.white70)),
+                                color: positionColor,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
                               ),
@@ -117,10 +128,14 @@ class _RankingScreenState extends State<RankingScreen> {
                           // Avatar placeholder
                           CircleAvatar(
                             radius: 16,
-                            backgroundColor: isUser ? const Color(0xff6c5ce7) : const Color(0xff243049),
+                            backgroundColor: isUser ? const Color(0xff6B5FD3) : const Color(0xffFAF9F6),
                             child: Text(
                               item.nome.substring(0, 1).toUpperCase(),
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: isUser ? Colors.white : const Color(0xff2D2D3A), 
+                                fontSize: 11, 
+                                fontWeight: FontWeight.bold
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -130,8 +145,8 @@ class _RankingScreenState extends State<RankingScreen> {
                             child: Text(
                               item.nome,
                               style: TextStyle(
-                                color: isUser ? const Color(0xff00f5d4) : Colors.white,
-                                fontWeight: isUser ? FontWeight.bold : FontWeight.w500,
+                                color: isUser ? const Color(0xff6B5FD3) : const Color(0xff2D2D3A),
+                                fontWeight: isUser ? FontWeight.bold : FontWeight.w600,
                                 fontSize: 13,
                               ),
                             ),
@@ -143,12 +158,12 @@ class _RankingScreenState extends State<RankingScreen> {
                             children: [
                               Text(
                                 '${item.xpTotal} XP',
-                                style: const TextStyle(color: Color(0xff00f5d4), fontWeight: FontWeight.bold, fontSize: 12),
+                                style: const TextStyle(color: Color(0xff3B7DD8), fontWeight: FontWeight.bold, fontSize: 12),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 'Nível ${item.nivel}',
-                                style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                style: const TextStyle(color: Color(0xff6B6B76), fontSize: 10),
                               ),
                             ],
                           ),
@@ -172,14 +187,21 @@ class _RankingScreenState extends State<RankingScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xff6c5ce7) : const Color(0xff151c2c),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isActive ? Colors.transparent : const Color(0xff243049)),
+          color: isActive ? const Color(0xff6B5FD3) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isActive ? Colors.transparent : const Color(0xffE2E2E6)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            )
+          ],
         ),
         child: Text(
           text,
           style: TextStyle(
-            color: isActive ? Colors.white : Colors.white54,
+            color: isActive ? Colors.white : const Color(0xff6B6B76),
             fontWeight: FontWeight.bold,
             fontSize: 11,
           ),
@@ -198,7 +220,7 @@ class _RankingScreenState extends State<RankingScreen> {
           child: Text(
             name.split(' ').first,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Color(0xff2D2D3A), fontSize: 11, fontWeight: FontWeight.bold),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -209,25 +231,25 @@ class _RankingScreenState extends State<RankingScreen> {
           width: 68,
           height: pillarHeight,
           decoration: BoxDecoration(
-            color: const Color(0xff151c2c),
+            color: Colors.white,
             border: Border(
               top: BorderSide(color: medalColor, width: 4),
-              left: BorderSide(color: medalColor.withOpacity(0.4), width: 1.5),
-              right: BorderSide(color: medalColor.withOpacity(0.4), width: 1.5),
+              left: const BorderSide(color: Color(0xffE2E2E6), width: 1.5),
+              right: const BorderSide(color: Color(0xffE2E2E6), width: 1.5),
+              bottom: const BorderSide(color: Color(0xffE2E2E6), width: 1.5),
             ),
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(8),
-              topRight: Radius.circular(8),
+              topLeft: Radius.circular(12),
+              topRight: Radius.circular(12),
             ),
-            boxShadow: isWinner 
-                ? [
-                    BoxShadow(
-                      color: medalColor.withOpacity(0.2),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    )
-                  ]
-                : [],
+            boxShadow: [
+              BoxShadow(
+                color: isWinner ? medalColor.withOpacity(0.15) : Colors.black.withOpacity(0.02),
+                blurRadius: 8,
+                spreadRadius: 1,
+                offset: const Offset(0, 2),
+              )
+            ],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -243,13 +265,13 @@ class _RankingScreenState extends State<RankingScreen> {
                 child: Center(
                   child: Text(
                     pos,
-                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Icon(
-                isWinner ? Icons.emoji_events : Icons.emoji_events_outlined,
+                isWinner ? Icons.emoji_events_rounded : Icons.emoji_events_outlined,
                 color: medalColor,
                 size: 20,
               )

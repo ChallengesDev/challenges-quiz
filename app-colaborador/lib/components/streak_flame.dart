@@ -83,9 +83,9 @@ class _StreakFlameState extends State<StreakFlame> with TickerProviderStateMixin
     final hasActiveStreak = widget.streak > 0;
 
     // Determine colors
-    Color flameColor = Colors.orangeAccent;
-    Color borderColor = Colors.orangeAccent.withOpacity(0.5);
-    Color glowColor = Colors.orange.withOpacity(0.2);
+    Color flameColor = Colors.amber; // Dourado
+    Color borderColor = Colors.amber.withOpacity(0.3);
+    Color glowColor = Colors.amber.withOpacity(0.1);
     double opacity = 1.0;
 
     if (isInRisk) {
@@ -94,20 +94,16 @@ class _StreakFlameState extends State<StreakFlame> with TickerProviderStateMixin
       glowColor = Colors.red.withOpacity(0.1);
       opacity = 0.65; // Dimmed
     } else if (!hasActiveStreak) {
-      flameColor = Colors.grey;
-      borderColor = Colors.grey.withOpacity(0.3);
+      flameColor = const Color(0xff6B6B76); // cinza médio
+      borderColor = const Color(0xff6B6B76).withOpacity(0.2);
       glowColor = Colors.transparent;
       opacity = 0.5;
-    } else if (widget.isStreakFreezeActive) {
-      flameColor = Colors.cyanAccent;
-      borderColor = Colors.cyanAccent.withOpacity(0.6);
-      glowColor = Colors.cyan.withOpacity(0.2);
     }
 
     Widget flameWidget = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xff151c2c),
+        color: Colors.white,
         border: Border.all(color: borderColor, width: 1.5),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
@@ -115,7 +111,12 @@ class _StreakFlameState extends State<StreakFlame> with TickerProviderStateMixin
             color: glowColor,
             blurRadius: isInRisk ? 12 : 8,
             spreadRadius: isInRisk ? 2 : 1,
-          )
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
         ]
       ),
       child: Row(
@@ -136,14 +137,6 @@ class _StreakFlameState extends State<StreakFlame> with TickerProviderStateMixin
               fontFamily: 'Outfit',
             ),
           ),
-          if (widget.isStreakFreezeActive) ...[
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.ac_unit,
-              color: Colors.cyanAccent,
-              size: 12,
-            )
-          ]
         ],
       ),
     );
@@ -170,18 +163,13 @@ class _StreakFlameState extends State<StreakFlame> with TickerProviderStateMixin
       );
     }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.pushNamed(context, '/streak_freeze');
-      },
-      child: Opacity(
-        opacity: opacity,
-        child: Tooltip(
-          message: isInRisk
-              ? 'Sua chama vai apagar! Clique para ver proteção.'
-              : 'Sua Sequência! Clique para ver Streak Freeze.',
-          child: flameWidget,
-        ),
+    return Opacity(
+      opacity: opacity,
+      child: Tooltip(
+        message: isInRisk
+            ? 'Sua chama vai apagar! Complete um desafio hoje.'
+            : 'Sua Sequência Diária!',
+        child: flameWidget,
       ),
     );
   }

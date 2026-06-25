@@ -10,7 +10,6 @@ import 'screens/home_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'screens/result_screen.dart';
 import 'screens/notifications_screen.dart';
-import 'screens/streak_freeze_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,36 +43,41 @@ class MyApp extends StatelessWidget {
         title: 'Challenges Quiz',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xff0b0f19),
-          primaryColor: const Color(0xff6c5ce7),
-          colorScheme: const ColorScheme.dark(
-            primary: Color(0xff6c5ce7),
-            secondary: Color(0xff00f5d4),
-            background: Color(0xff0b0f19),
-            surface: Color(0xff151c2c),
+          brightness: Brightness.light,
+          scaffoldBackgroundColor: const Color(0xffFAF9F6),
+          primaryColor: const Color(0xff6B5FD3),
+          cardColor: const Color(0xffFFFFFF),
+          colorScheme: const ColorScheme.light(
+            primary: Color(0xff6B5FD3),
+            secondary: Color(0xff3B7DD8),
+            background: Color(0xffFAF9F6),
+            surface: Color(0xffFFFFFF),
             onPrimary: Colors.white,
-            onSecondary: Colors.black,
+            onSecondary: Colors.white,
+            onSurface: Color(0xff2D2D3A),
+            onBackground: Color(0xff2D2D3A),
           ),
           fontFamily: 'Outfit',
           textTheme: const TextTheme(
-            bodyLarge: TextStyle(color: Colors.white),
-            bodyMedium: TextStyle(color: Colors.white70),
+            bodyLarge: TextStyle(color: Color(0xff2D2D3A)),
+            bodyMedium: TextStyle(color: Color(0xff6B6B76)),
           ),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xff0b0f19),
+            backgroundColor: Color(0xffFAF9F6),
             elevation: 0,
-            iconTheme: IconThemeData(color: Colors.white),
+            iconTheme: IconThemeData(color: Color(0xff2D2D3A)),
             titleTextStyle: TextStyle(
-              color: Colors.white,
+              color: Color(0xff2D2D3A),
               fontSize: 18,
               fontWeight: FontWeight.bold,
+              fontFamily: 'Outfit',
             ),
           ),
           bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-            backgroundColor: Color(0xff151c2c),
-            selectedItemColor: Color(0xff00f5d4),
-            unselectedItemColor: Colors.white54,
+            backgroundColor: Color(0xffFFFFFF),
+            selectedItemColor: Color(0xff6B5FD3),
+            unselectedItemColor: Color(0xff6B6B76),
+            elevation: 8,
           ),
         ),
         initialRoute: '/',
@@ -84,7 +88,6 @@ class MyApp extends StatelessWidget {
           '/quiz': (context) => const QuizScreen(),
           '/result': (context) => const ResultScreen(),
           '/notifications': (context) => const NotificationsScreen(),
-          '/streak_freeze': (context) => const StreakFreezeScreen(),
         },
       ),
     );

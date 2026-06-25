@@ -9,6 +9,8 @@ class Colaborador {
   final String? empresaId;
   final int metaDiaria;
   final bool metaDiariaDefinida;
+  final String? corMascote;
+  final String? fotoUrl;
 
   Colaborador({
     required this.id,
@@ -21,6 +23,8 @@ class Colaborador {
     this.empresaId,
     this.metaDiaria = 10,
     this.metaDiariaDefinida = false,
+    this.corMascote,
+    this.fotoUrl,
   });
 
   factory Colaborador.fromJson(Map<String, dynamic> json) {
@@ -35,6 +39,8 @@ class Colaborador {
       empresaId: json['empresa_id'] as String?,
       metaDiaria: json['meta_diaria'] as int? ?? 10,
       metaDiariaDefinida: json['meta_diaria_definida'] as bool? ?? false,
+      corMascote: json['cor_mascote'] as String?,
+      fotoUrl: json['foto_url'] as String?,
     );
   }
 }
@@ -301,4 +307,18 @@ class OcorrenciaFraude {
       'detalhes': detalhes,
     };
   }
+}
+
+class DailyMission {
+  final String id;
+  final String titulo;
+  final String descricao;
+  final int xpReward;
+
+  DailyMission({
+    required this.id,
+    required this.titulo,
+    required this.descricao,
+    this.xpReward = 100,
+  });
 }

@@ -64,15 +64,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Color _getColorForType(String tipo) {
     switch (tipo) {
       case 'novo_quiz':
-        return const Color(0xff6c5ce7); // Indigo
+        return const Color(0xff6B5FD3); // Purple
       case 'conquista':
-        return const Color(0xfff59e0b); // Amber Gold
+        return const Color(0xffFFD700); // Gold
       case 'aviso':
-        return const Color(0xffef4444); // Red
+        return const Color(0xffFF5252); // Red
       case 'motivacional':
-        return const Color(0xff00f5d4); // Neon Mint
+        return const Color(0xff3B7DD8); // Blue
       default:
-        return Colors.white54;
+        return const Color(0xff6B6B76);
     }
   }
 
@@ -84,16 +84,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final colab = auth.colaborador;
 
     return Scaffold(
-      backgroundColor: const Color(0xff0b0f19),
+      backgroundColor: const Color(0xffFAF9F6),
       appBar: AppBar(
-        title: const Text('Notificações', style: TextStyle(fontFamily: 'Outfit')),
+        title: const Text('Notificações', style: TextStyle(fontFamily: 'Outfit', color: Color(0xff2D2D3A), fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xffFAF9F6),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Color(0xff2D2D3A)),
         actions: [
           if (notifs.any((n) => n['lida'] == false))
             TextButton.icon(
-              icon: const Icon(Icons.done_all, size: 18, color: Color(0xff00f5d4)),
+              icon: const Icon(Icons.done_all, size: 18, color: Color(0xff6B5FD3)),
               label: const Text(
                 'Lidas',
-                style: TextStyle(color: Color(0xff00f5d4), fontSize: 13, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Color(0xff6B5FD3), fontSize: 13, fontWeight: FontWeight.bold),
               ),
               onPressed: () {
                 if (colab != null) {
@@ -107,20 +110,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: provider.loading && notifs.isEmpty
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xff00f5d4)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xff6B5FD3)),
               ),
             )
           : notifs.isEmpty
               ? _buildEmptyState()
               : RefreshIndicator(
-                  color: const Color(0xff00f5d4),
-                  backgroundColor: const Color(0xff151c2c),
+                  color: const Color(0xff6B5FD3),
+                  backgroundColor: Colors.white,
                   onRefresh: () async {
                     if (colab != null) {
                       await provider.loadNotifications(colab.id, auth.isMock);
                     }
                   },
                   child: ListView.separated(
+                    physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     itemCount: notifs.length,
                     separatorBuilder: (context, index) => const SizedBox(height: 12),
@@ -146,12 +150,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: lida ? const Color(0xff151c2c) : const Color(0xff1e1b4b).withOpacity(0.4),
-                            borderRadius: BorderRadius.circular(12),
+                            color: lida ? Colors.white : const Color(0xff6B5FD3).withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: lida ? const Color(0xff243049) : const Color(0xff6c5ce7).withOpacity(0.4),
+                              color: lida ? const Color(0xffE2E2E6) : const Color(0xff6B5FD3).withOpacity(0.3),
                               width: lida ? 1 : 1.5,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              )
+                            ],
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +200,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                           child: Text(
                                             titulo,
                                             style: TextStyle(
-                                              color: Colors.white,
+                                              color: const Color(0xff2D2D3A),
                                               fontSize: 14,
                                               fontWeight: lida ? FontWeight.w600 : FontWeight.bold,
                                             ),
@@ -203,7 +214,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                             width: 8,
                                             height: 8,
                                             decoration: const BoxDecoration(
-                                              color: Color(0xff00f5d4),
+                                              color: Color(0xff6B5FD3),
                                               shape: BoxShape.circle,
                                             ),
                                           ),
@@ -215,7 +226,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     Text(
                                       mensagem,
                                       style: const TextStyle(
-                                        color: Colors.white70,
+                                        color: Color(0xff6B6B76),
                                         fontSize: 13,
                                         height: 1.4,
                                       ),
@@ -229,17 +240,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                         Text(
                                           _formatTimeAgo(dataStr),
                                           style: const TextStyle(
-                                            color: Colors.white38,
+                                            color: Color(0xff6B6B76),
                                             fontSize: 11,
                                           ),
                                         ),
                                         if (!lida)
                                           const Text(
-                                            'Toque para marcar como lida',
+                                            'Toque para ler',
                                             style: TextStyle(
-                                              color: Color(0xff6c5ce7),
+                                              color: Color(0xff6B5FD3),
                                               fontSize: 10,
-                                              fontWeight: FontWeight.w500,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ),
                                       ],
@@ -268,14 +279,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: const Color(0xff151c2c),
+                color: Colors.white,
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xff243049), width: 2),
+                border: Border.all(color: const Color(0xffE2E2E6), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  )
+                ],
               ),
               child: const Center(
                 child: Icon(
                   Icons.notifications_off_outlined,
-                  color: Colors.white24,
+                  color: Color(0xff6B6B76),
                   size: 36,
                 ),
               ),
@@ -284,7 +302,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             const Text(
               'Tudo limpo por aqui!',
               style: TextStyle(
-                color: Colors.white,
+                color: Color(0xff2D2D3A),
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 fontFamily: 'Outfit',
@@ -295,7 +313,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               'Você não tem nenhuma notificação pendente no momento.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white38,
+                color: Color(0xff6B6B76),
                 fontSize: 13,
                 height: 1.4,
               ),

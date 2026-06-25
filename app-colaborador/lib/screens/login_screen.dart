@@ -62,34 +62,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     }
   }
 
-  Future<void> _handlePasswordReset() async {
-    setState(() => _errorMessage = null);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
-    final newPass = _newPasswordController.text;
-    final confirmPass = _confirmPasswordController.text;
-
-    if (newPass.length < 6) {
-      setState(() => _errorMessage = 'A senha deve conter no mínimo 6 caracteres.');
-      return;
-    }
-
-    if (newPass != confirmPass) {
-      setState(() => _errorMessage = 'As senhas não coincidem.');
-      return;
-    }
-
-    final success = await authProvider.resetPassword(newPass);
-    if (success) {
-      // Password changed, state updates and provider will auto redirect.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Senha redefinida com sucesso! Bem-vindo!')),
-      );
-    } else {
-      setState(() => _errorMessage = 'Falha ao redefinir a senha. Tente novamente.');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -106,9 +78,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xff0b0f19), // Fundo escuro
+      backgroundColor: const Color(0xffFAF9F6),
       body: Center(
         child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.all(24.0),
           child: FadeTransition(
             opacity: _fadeAnimation,
@@ -116,14 +89,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               constraints: const BoxConstraints(maxWidth: 400),
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: const Color(0xff151c2c),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xff243049)),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xffE2E2E6)),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xff6c5ce7).withOpacity(0.1),
-                    blurRadius: 24,
-                    spreadRadius: 4,
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 16,
+                    spreadRadius: 2,
                   )
                 ],
               ),
@@ -135,13 +108,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   Center(
                     child: Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: const BoxDecoration(
-                        color: Color(0xff6c5ce7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xff6B5FD3).withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.emoji_events_outlined,
-                        color: Colors.white,
+                        color: Color(0xff6B5FD3),
                         size: 40,
                       ),
                     ),
@@ -151,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     'Challenges Quiz',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Color(0xff2D2D3A),
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
@@ -163,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     'App do Colaborador',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Color(0xff00f5d4),
+                      color: Color(0xff3B7DD8),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -173,11 +146,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   // Errors
                   if (_errorMessage != null)
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.redAccent.withOpacity(0.1),
-                        border: Border.all(color: Colors.redAccent),
-                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.redAccent.withOpacity(0.05),
+                        border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         children: [
@@ -186,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -197,23 +170,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   // Email
                   TextField(
                     controller: _emailController,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Color(0xff2D2D3A)),
                     decoration: InputDecoration(
                       hintText: 'email@empresa.com',
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      labelText: 'E-mail Corporativo',
-                      labelStyle: const TextStyle(color: Colors.white70),
-                      prefixIcon: const Icon(Icons.email_outlined, color: Colors.white70),
+                      hintStyle: const TextStyle(color: Color(0xff6B6B76)),
+                      labelText: 'E-mail corporativo',
+                      helperText: 'Use o e-mail cadastrado pelo seu RH',
+                      helperStyle: const TextStyle(color: Color(0xff6B6B76), fontSize: 11),
+                      labelStyle: const TextStyle(color: Color(0xff6B6B76)),
+                      prefixIcon: const Icon(Icons.email_outlined, color: Color(0xff6B6B76)),
                       enabledBorder: OutlineInputBorder(
-                        borderSide: const BorderSide(color: Color(0xff243049)),
-                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xffE2E2E6)),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderSide: const BorderSide(color: Color(0xff6c5ce7)),
-                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xff6B5FD3)),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       filled: true,
-                      fillColor: const Color(0xff0b0f19),
+                      fillColor: const Color(0xffFAF9F6),
                     ),
                     keyboardType: TextInputType.emailAddress,
                   ),
@@ -223,30 +198,30 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   TextField(
                     controller: _passwordController,
                     obscureText: !_isPasswordVisible,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Color(0xff2D2D3A)),
                     decoration: InputDecoration(
                       hintText: 'Sua senha',
-                      hintStyle: const TextStyle(color: Colors.white38),
+                      hintStyle: const TextStyle(color: Color(0xff6B6B76)),
                       labelText: 'Senha de Acesso',
-                      labelStyle: const TextStyle(color: Colors.white70),
-                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
+                      labelStyle: const TextStyle(color: Color(0xff6B6B76)),
+                      prefixIcon: const Icon(Icons.lock_outline, color: Color(0xff6B6B76)),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                          color: Colors.white70,
+                          color: const Color(0xff6B6B76),
                         ),
                         onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderSide: const BorderSide(color: Color(0xff243049)),
-                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xffE2E2E6)),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderSide: const BorderSide(color: Color(0xff6c5ce7)),
-                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xff6B5FD3)),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       filled: true,
-                      fillColor: const Color(0xff0b0f19),
+                      fillColor: const Color(0xffFAF9F6),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -255,11 +230,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   ElevatedButton(
                     onPressed: authProvider.loading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xff6c5ce7),
+                      backgroundColor: const Color(0xff6B5FD3),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      elevation: 0,
                     ),
                     child: authProvider.loading
                         ? const SizedBox(
@@ -282,13 +258,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.02),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xff243049)),
+                      color: const Color(0xffFAF9F6),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xffE2E2E6)),
                     ),
                     child: const Text(
                       'Modo de Demonstração:\nE-mail: colaborador@challenges.com\nSenha: Challenges@123',
-                      style: TextStyle(color: Colors.white54, fontSize: 11),
+                      style: TextStyle(color: Color(0xff6B6B76), fontSize: 11, height: 1.4),
                       textAlign: TextAlign.center,
                     ),
                   )
@@ -303,22 +279,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Widget _buildResetPasswordBody(AuthProvider authProvider) {
     return Scaffold(
-      backgroundColor: const Color(0xff0b0f19),
+      backgroundColor: const Color(0xffFAF9F6),
       body: Center(
         child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.all(24.0),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 400),
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: const Color(0xff151c2c),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xff243049)),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xffE2E2E6)),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xffffd700).withOpacity(0.1),
-                  blurRadius: 24,
-                  spreadRadius: 4,
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 16,
+                  spreadRadius: 2,
                 )
               ],
             ),
@@ -326,113 +303,61 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(
-                  Icons.vpn_key_outlined,
-                  color: Color(0xffffd700),
-                  size: 48,
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xff3B7DD8).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.mark_email_read_outlined,
+                      color: Color(0xff3B7DD8),
+                      size: 56,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 const Text(
                   'Primeiro Acesso',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color(0xff2D2D3A),
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Por questões de segurança corporativa, você precisa redefinir sua senha padrão antes de prosseguir.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                const SizedBox(height: 24),
-
-                if (_errorMessage != null)
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.1),
-                      border: Border.all(color: Colors.redAccent),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                    ),
-                  ),
-                if (_errorMessage != null) const SizedBox(height: 16),
-
-                // New Password
-                TextField(
-                  controller: _newPasswordController,
-                  obscureText: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Nova Senha',
-                    labelStyle: const TextStyle(color: Colors.white70),
-                    prefixIcon: const Icon(Icons.lock_open, color: Colors.white70),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xff243049)),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xffffd700)),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xff0b0f19),
-                  ),
-                ),
                 const SizedBox(height: 16),
-
-                // Confirm Password
-                TextField(
-                  controller: _confirmPasswordController,
-                  obscureText: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Confirmar Nova Senha',
-                    labelStyle: const TextStyle(color: Colors.white70),
-                    prefixIcon: const Icon(Icons.lock_open, color: Colors.white70),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xff243049)),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xffffd700)),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xff0b0f19),
+                const Text(
+                  'Enviamos um e-mail para você criar sua senha pessoal. Verifique sua caixa de entrada.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Color(0xff6B6B76),
+                    fontSize: 14,
+                    height: 1.5,
                   ),
                 ),
-                const SizedBox(height: 24),
-
+                const SizedBox(height: 32),
                 ElevatedButton(
-                  onPressed: authProvider.loading ? null : _handlePasswordReset,
+                  onPressed: () async {
+                    await authProvider.signOut();
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xffffd700),
+                    backgroundColor: const Color(0xff6B5FD3),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Voltar para o Login',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  child: authProvider.loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
-                        )
-                      : const Text(
-                          'Redefinir Senha',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                 ),
               ],
             ),

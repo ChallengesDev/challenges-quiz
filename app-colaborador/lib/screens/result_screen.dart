@@ -40,7 +40,7 @@ class _ResultScreenState extends State<ResultScreen> {
     bool isSuspicious = integrity < 70;
 
     return Scaffold(
-      backgroundColor: const Color(0xff0b0f19),
+      backgroundColor: const Color(0xffFAF9F6),
       body: Stack(
         alignment: Alignment.center,
         children: [
@@ -50,34 +50,35 @@ class _ResultScreenState extends State<ResultScreen> {
             blastDirectionality: BlastDirectionality.explosive,
             shouldLoop: false,
             colors: const [
-              Color(0xff6c5ce7),
-              Color(0xff00f5d4),
-              Color(0xffffd700),
-              Colors.orange,
-              Colors.blue,
+              Color(0xff6B5FD3),
+              Color(0xff3B7DD8),
+              Color(0xffFFD700),
+              Colors.orangeAccent,
+              Colors.lightBlue,
             ],
           ),
           
           // Result Body Card
           Center(
             child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(24.0),
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 400),
                 padding: const EdgeInsets.all(32),
                 decoration: BoxDecoration(
-                  color: const Color(0xff151c2c),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: isSuspicious ? Colors.redAccent : const Color(0xff243049),
+                    color: isSuspicious ? Colors.redAccent : const Color(0xffE2E2E6),
                     width: 2,
                   ),
                   boxShadow: [
                     BoxShadow(
                       color: isSuspicious 
-                          ? Colors.red.withOpacity(0.1) 
-                          : const Color(0xff00f5d4).withOpacity(0.1),
-                      blurRadius: 24,
+                          ? Colors.red.withOpacity(0.05) 
+                          : const Color(0xff6B5FD3).withOpacity(0.05),
+                      blurRadius: 20,
                       spreadRadius: 2,
                     )
                   ],
@@ -93,12 +94,12 @@ class _ResultScreenState extends State<ResultScreen> {
                         decoration: BoxDecoration(
                           color: isSuspicious 
                               ? Colors.redAccent.withOpacity(0.1) 
-                              : const Color(0xff00f5d4).withOpacity(0.1),
+                              : const Color(0xff6B5FD3).withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          isSuspicious ? Icons.gavel_outlined : Icons.emoji_events,
-                          color: isSuspicious ? Colors.redAccent : const Color(0xffffd700),
+                          isSuspicious ? Icons.gavel_rounded : Icons.emoji_events_rounded,
+                          color: isSuspicious ? Colors.redAccent : const Color(0xffFFD700),
                           size: 48,
                         ),
                       ),
@@ -110,7 +111,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       isSuspicious ? 'Sessão Registrada como Suspeita' : 'Desafio Concluído!',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: isSuspicious ? Colors.redAccent : Colors.white,
+                        color: isSuspicious ? Colors.redAccent : const Color(0xff2D2D3A),
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         fontFamily: 'Outfit',
@@ -121,10 +122,10 @@ class _ResultScreenState extends State<ResultScreen> {
                     
                     Text(
                       isSuspicious 
-                          ? 'Múltiplas saídas de tela ou tempo de reação suspeitos.'
+                          ? 'Múltiplas saídas de tela ou tempo de reação suspeitos detectados.'
                           : 'Seu progresso foi salvo e sincronizado com o gestor.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(color: Color(0xff6B6B76), fontSize: 12, height: 1.4),
                     ),
                     
                     const SizedBox(height: 32),
@@ -133,9 +134,9 @@ class _ResultScreenState extends State<ResultScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xff0b0f19),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xff243049)),
+                        color: const Color(0xffFAF9F6),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xffE2E2E6)),
                       ),
                       child: Column(
                         children: [
@@ -143,27 +144,27 @@ class _ResultScreenState extends State<ResultScreen> {
                           _buildStatRow(
                             'XP Ganhos',
                             '+$finalScore XP',
-                            valueColor: const Color(0xff00f5d4),
+                            valueColor: const Color(0xff6B5FD3),
                           ),
-                          const Divider(color: Color(0xff243049)),
+                          const Divider(color: Color(0xffE2E2E6)),
                           
                           // Correct Answers
                           _buildStatRow(
                             'Acertos',
                             '$correctQ de $totalQ perguntas',
-                            valueColor: Colors.white,
+                            valueColor: const Color(0xff2D2D3A),
                           ),
-                          const Divider(color: Color(0xff243049)),
+                          const Divider(color: Color(0xffE2E2E6)),
                           
                           // Integrity Score
                           _buildStatRow(
                             'Score de Integridade',
                             '$integrity / 100',
-                            valueColor: isSuspicious ? Colors.redAccent : const Color(0xff00f5d4),
+                            valueColor: isSuspicious ? Colors.redAccent : const Color(0xff3B7DD8),
                             icon: Icon(
                               Icons.shield_outlined,
                               size: 14,
-                              color: isSuspicious ? Colors.redAccent : const Color(0xff00f5d4),
+                              color: isSuspicious ? Colors.redAccent : const Color(0xff3B7DD8),
                             ),
                           ),
                         ],
@@ -179,11 +180,12 @@ class _ResultScreenState extends State<ResultScreen> {
                         Navigator.pushReplacementNamed(context, '/home');
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xff6c5ce7),
+                        backgroundColor: const Color(0xff6B5FD3),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
+                        elevation: 0,
                       ),
                       child: const Text(
                         'Voltar ao Início',
@@ -208,7 +210,7 @@ class _ResultScreenState extends State<ResultScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        Text(label, style: const TextStyle(color: Color(0xff6B6B76), fontSize: 13, fontWeight: FontWeight.w600)),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [

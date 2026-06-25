@@ -52,6 +52,8 @@ create table public.usuarios (
     primeiro_acesso boolean not null default true,
     meta_diaria integer not null default 10,
     meta_diaria_definida boolean not null default false,
+    cor_mascote text,
+    foto_url text,
     criado_em timestamptz not null default now()
 );
 

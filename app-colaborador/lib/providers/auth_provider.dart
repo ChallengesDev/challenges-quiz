@@ -43,6 +43,8 @@ class AuthProvider extends ChangeNotifier {
           ativo: true,
           primeiroAcesso: data['primeiro_acesso'] ?? false,
           empresaId: data['empresa_id'] ?? 'mock-company-123',
+          corMascote: data['cor_mascote'],
+          fotoUrl: data['foto_url'],
         );
         _loading = false;
         notifyListeners();
@@ -91,17 +93,21 @@ class AuthProvider extends ChangeNotifier {
 
     // 1. Valida credenciais mock imediatamente para o modo de demonstração offline
     if (email == 'colaborador@challenges.com' && password == 'Challenges@123') {
+      final prefs = await SharedPreferences.getInstance();
+      final bool mockResetDone = prefs.getBool('mock_reset_done') ?? false;
+
       final mockData = {
         'id': 'mock-colab-uuid-123',
         'nome': 'João Colaborador',
         'email': 'colaborador@challenges.com',
         'cargo': 'Analista de Sistemas',
         'departamento': 'TI / Tecnologia',
-        'primeiro_acesso': true // Força o reset de senha
+        'primeiro_acesso': !mockResetDone,
+        'cor_mascote': prefs.getString('mock_cor_mascote'),
+        'foto_url': prefs.getString('mock_foto_url')
       };
 
       try {
-        final prefs = await SharedPreferences.getInstance();
         await prefs.setString('mock_colab_session', jsonEncode(mockData));
       } catch (e) {
         print('Erro ao salvar cache de mock: $e');
@@ -116,9 +122,16 @@ class AuthProvider extends ChangeNotifier {
         cargo: mockData['cargo'] as String,
         departamento: mockData['departamento'] as String,
         ativo: true,
-        primeiroAcesso: true,
+        primeiroAcesso: !mockResetDone,
         empresaId: 'mock-company-123',
+        corMascote: mockData['cor_mascote'] as String?,
+        fotoUrl: mockData['foto_url'] as String?,
       );
+
+      if (!mockResetDone) {
+        print('Simulação: E-mail de redefinição de senha enviado para colaborador@challenges.com');
+        await prefs.setBool('mock_reset_done', true);
+      }
 
       _loading = false;
       notifyListeners();
@@ -136,6 +149,22 @@ class AuthProvider extends ChangeNotifier {
         _session = response.session;
         _isMock = false;
         await _fetchUserProfile(response.session!.user.id);
+
+        if (_colaborador != null && _colaborador!.primeiroAcesso) {
+          try {
+            await _supabase.auth.resetPasswordForEmail(email);
+            print('E-mail de redefinição de senha enviado para $email');
+          } catch (mailErr) {
+            print('Erro ao enviar e-mail de redefinição: $mailErr');
+          }
+
+          try {
+            await _supabase.from('usuarios').update({'primeiro_acesso': false}).eq('id', _colaborador!.id);
+          } catch (dbErr) {
+            print('Erro ao atualizar primeiro_acesso no banco: $dbErr');
+          }
+        }
+
         _loading = false;
         notifyListeners();
         return true;
@@ -158,15 +187,12 @@ class AuthProvider extends ChangeNotifier {
       if (_isMock) {
         // Atualiza mock no SharedPreferences
         final prefs = await SharedPreferences.getInstance();
-        final mockData = {
-          'id': _colaborador!.id,
-          'nome': _colaborador!.nome,
-          'email': _colaborador!.email,
-          'cargo': _colaborador!.cargo,
-          'departamento': _colaborador!.departamento,
-          'primeiro_acesso': false // Já redefinido
-        };
-        await prefs.setString('mock_colab_session', jsonEncode(mockData));
+        final mockSessionStr = prefs.getString('mock_colab_session');
+        if (mockSessionStr != null) {
+          final Map<String, dynamic> data = jsonDecode(mockSessionStr);
+          data['primeiro_acesso'] = false; // Já redefinido
+          await prefs.setString('mock_colab_session', jsonEncode(data));
+        }
 
         _colaborador = Colaborador(
           id: _colaborador!.id,
@@ -176,6 +202,7 @@ class AuthProvider extends ChangeNotifier {
           departamento: _colaborador!.departamento,
           ativo: true,
           primeiroAcesso: false,
+          corMascote: _colaborador!.corMascote,
         );
         _loading = false;
         notifyListeners();
@@ -200,6 +227,7 @@ class AuthProvider extends ChangeNotifier {
           ativo: _colaborador!.ativo,
           primeiroAcesso: false,
           empresaId: _colaborador!.empresaId,
+          corMascote: _colaborador!.corMascote,
         );
         _loading = false;
         notifyListeners();
@@ -212,6 +240,88 @@ class AuthProvider extends ChangeNotifier {
     _loading = false;
     notifyListeners();
     return false;
+  }
+
+  Future<void> updateMascotColor(String color) async {
+    if (_colaborador == null) return;
+    try {
+      if (_isMock) {
+        final prefs = await SharedPreferences.getInstance();
+        final mockSessionStr = prefs.getString('mock_colab_session');
+        if (mockSessionStr != null) {
+          final Map<String, dynamic> data = jsonDecode(mockSessionStr);
+          data['cor_mascote'] = color;
+          await prefs.setString('mock_colab_session', jsonEncode(data));
+        }
+        await prefs.setString('mock_cor_mascote', color);
+      } else {
+        await _supabase
+            .from('usuarios')
+            .update({'cor_mascote': color})
+            .eq('id', _colaborador!.id);
+      }
+
+      _colaborador = Colaborador(
+        id: _colaborador!.id,
+        nome: _colaborador!.nome,
+        email: _colaborador!.email,
+        cargo: _colaborador!.cargo,
+        departamento: _colaborador!.departamento,
+        ativo: _colaborador!.ativo,
+        primeiroAcesso: _colaborador!.primeiroAcesso,
+        empresaId: _colaborador!.empresaId,
+        metaDiaria: _colaborador!.metaDiaria,
+        metaDiariaDefinida: _colaborador!.metaDiariaDefinida,
+        corMascote: color,
+        fotoUrl: _colaborador!.fotoUrl,
+      );
+      notifyListeners();
+    } catch (e) {
+      print('Erro ao atualizar cor do mascote: $e');
+    }
+  }
+
+  Future<void> updateProfilePicture(String? url) async {
+    if (_colaborador == null) return;
+    try {
+      if (_isMock) {
+        final prefs = await SharedPreferences.getInstance();
+        final mockSessionStr = prefs.getString('mock_colab_session');
+        if (mockSessionStr != null) {
+          final Map<String, dynamic> data = jsonDecode(mockSessionStr);
+          data['foto_url'] = url;
+          await prefs.setString('mock_colab_session', jsonEncode(data));
+        }
+        if (url != null) {
+          await prefs.setString('mock_foto_url', url);
+        } else {
+          await prefs.remove('mock_foto_url');
+        }
+      } else {
+        await _supabase
+            .from('usuarios')
+            .update({'foto_url': url})
+            .eq('id', _colaborador!.id);
+      }
+
+      _colaborador = Colaborador(
+        id: _colaborador!.id,
+        nome: _colaborador!.nome,
+        email: _colaborador!.email,
+        cargo: _colaborador!.cargo,
+        departamento: _colaborador!.departamento,
+        ativo: _colaborador!.ativo,
+        primeiroAcesso: _colaborador!.primeiroAcesso,
+        empresaId: _colaborador!.empresaId,
+        metaDiaria: _colaborador!.metaDiaria,
+        metaDiariaDefinida: _colaborador!.metaDiariaDefinida,
+        corMascote: _colaborador!.corMascote,
+        fotoUrl: url,
+      );
+      notifyListeners();
+    } catch (e) {
+      print('Erro ao atualizar foto de perfil: $e');
+    }
   }
 
   Future<void> signOut() async {
