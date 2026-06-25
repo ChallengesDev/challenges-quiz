@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import '../models/models.dart';
 
 class ProfileProvider extends ChangeNotifier {
@@ -24,6 +26,9 @@ class ProfileProvider extends ChangeNotifier {
   bool _shouldShowConfetti = false;
   bool _dailyMissionCompleted = false;
 
+  String _lightningChallengeStatus = 'bloqueado';
+  List<Pergunta> _lightningChallengeQuestions = [];
+
   final List<DailyMission> _availableMissions = [
     DailyMission(id: 'm1', titulo: 'Super Combo', descricao: 'Acerte 3 perguntas seguidas'),
     DailyMission(id: 'm2', titulo: 'Foco Total', descricao: 'Responda a todas as perguntas de um quiz sem errar'),
@@ -33,6 +38,9 @@ class ProfileProvider extends ChangeNotifier {
   Pontuacao? get pontuacao => _pontuacao;
   List<Conquista> get conquistas => _conquistas;
   List<String> get unlockedConquistasIds => _unlockedConquistasIds;
+
+  String get lightningChallengeStatus => _lightningChallengeStatus;
+  List<Pergunta> get lightningChallengeQuestions => _lightningChallengeQuestions;
   List<RankingColaborador> get rankingGeral => _rankingGeral;
   bool get loading => _loading;
   bool get isMock => _isMock;
@@ -346,6 +354,13 @@ class ProfileProvider extends ChangeNotifier {
     );
     notifyListeners();
 
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_normal_quiz_completed_at_${_pontuacao!.usuarioId}', DateTime.now().toIso8601String());
+    } catch (e) {
+      // ignore
+    }
+
     if (!isMock) {
       try {
         await _supabase.from('pontuacoes').update({
@@ -477,6 +492,166 @@ class ProfileProvider extends ChangeNotifier {
       await prefs.setStringList('completed_desafios_$colabId', _completedDesafioIds);
     } catch (e) {
       print('Erro ao marcar desafio como concluído: $e');
+    }
+  }
+
+  Future<void> fetchLightningChallengeStatus(String colabId, bool isMock) async {
+    if (isMock) {
+      final prefs = await SharedPreferences.getInstance();
+      
+      final lastCompletedStr = prefs.getString('lightning_challenge_completed_at_$colabId');
+      bool completedToday = false;
+      if (lastCompletedStr != null) {
+        final lastCompleted = DateTime.parse(lastCompletedStr);
+        final now = DateTime.now();
+        if (lastCompleted.year == now.year && lastCompleted.month == now.month && lastCompleted.day == now.day) {
+          completedToday = true;
+        }
+      }
+
+      final lastNormalCompletedStr = prefs.getString('last_normal_quiz_completed_at_$colabId');
+      bool normalCompletedToday = false;
+      if (lastNormalCompletedStr != null) {
+        final lastNormal = DateTime.parse(lastNormalCompletedStr);
+        final now = DateTime.now();
+        if (lastNormal.year == now.year && lastNormal.month == now.month && lastNormal.day == now.day) {
+          normalCompletedToday = true;
+        }
+      }
+
+      if (completedToday) {
+        _lightningChallengeStatus = 'completado';
+      } else if (normalCompletedToday) {
+        _lightningChallengeStatus = 'disponivel';
+      } else {
+        _lightningChallengeStatus = 'bloqueado';
+      }
+
+      _lightningChallengeQuestions = [
+        Pergunta(
+          id: 'lp1',
+          desafioId: 'Compliance & LGPD',
+          texto: 'Qual é o prazo regulatório da LGPD para comunicar um incidente de segurança à ANPD?',
+          alternativaA: '24 horas',
+          alternativaB: 'Prazo razoável (estabelecido em até 2 dias úteis)',
+          alternativaC: '5 dias úteis',
+          alternativaD: 'Imediatamente (em até 1 hora)',
+          respostaCorreta: 'B',
+          explicacao: 'O artigo 48 da LGPD determina que o controlador deve comunicar à ANPD a ocorrência de incidente de segurança em prazo razoável, estabelecido pela ANPD em até 2 dias úteis.',
+          dificuldade: 'facil',
+        ),
+        Pergunta(
+          id: 'lp2',
+          desafioId: 'Compliance & LGPD',
+          texto: 'Qual base legal da LGPD permite tratar dados pessoais para proteção do crédito?',
+          alternativaA: 'Legítimo Interesse',
+          alternativaB: 'Execução de Contrato',
+          alternativaC: 'Proteção do Crédito',
+          alternativaD: 'Obrigação Regulatória',
+          respostaCorreta: 'C',
+          explicacao: 'A proteção do crédito é uma base legal explícita do artigo 7º da LGPD.',
+          dificuldade: 'medio',
+        ),
+        Pergunta(
+          id: 'lp3',
+          desafioId: 'Segurança da Informação',
+          texto: 'Qual o principal objetivo de um ataque de engenharia social por phishing?',
+          alternativaA: 'Criptografar arquivos locais',
+          alternativaB: 'Interromper servidores Web',
+          alternativaC: 'Manipular o usuário para obter senhas ou informações confidenciais',
+          alternativaD: 'Instalar mineradores de cripto',
+          respostaCorreta: 'C',
+          explicacao: 'O phishing visa induzir o usuário a revelar informações confidenciais por meio de engano.',
+          dificuldade: 'dificil',
+        ),
+        Pergunta(
+          id: 'lp4',
+          desafioId: 'Compliance & LGPD',
+          texto: 'Qual das seguintes opções é considerada um dado pessoal sensível segundo a LGPD?',
+          alternativaA: 'Número de telefone residencial',
+          alternativaB: 'Filiação a sindicato ou convicção religiosa',
+          alternativaC: 'Endereço de e-mail corporativo',
+          alternativaD: 'Data de nascimento',
+          respostaCorreta: 'B',
+          explicacao: 'Dados sobre religião, opinião política e filiação sindical são dados pessoais sensíveis pela LGPD.',
+          dificuldade: 'facil',
+        ),
+      ];
+
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final url = Uri.parse('http://localhost:8000/api/desafio-relampago/$colabId');
+      final response = await http.get(url).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final decoded = json.decode(utf8.decode(response.bodyBytes));
+        _lightningChallengeStatus = decoded['status'] as String? ?? 'bloqueado';
+        final List questionsList = decoded['perguntas'] as List? ?? [];
+        _lightningChallengeQuestions = questionsList.map((j) {
+          return Pergunta(
+            id: j['id'] as String,
+            desafioId: j['categoria'] as String? ?? 'Geral',
+            texto: j['texto'] as String,
+            alternativaA: j['alternativas'][0] as String,
+            alternativaB: j['alternativas'][1] as String,
+            alternativaC: j['alternativas'][2] as String,
+            alternativaD: j['alternativas'][3] as String,
+            respostaCorreta: j['resposta_correta'] as String,
+            explicacao: j['explicacao'] as String?,
+            dificuldade: j['dificuldade'] as String?,
+          );
+        }).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Erro ao obter status do desafio relâmpago: $e');
+      _lightningChallengeStatus = 'bloqueado';
+      notifyListeners();
+    }
+  }
+
+  Future<void> completeLightningChallenge(String colabId, int acertos, int total, int xpGanho, bool isMock) async {
+    final nowStr = DateTime.now().toIso8601String();
+    
+    if (_pontuacao != null) {
+      final newXp = _pontuacao!.xpTotal + xpGanho;
+      final newNivel = (newXp ~/ 500) + 1;
+      _pontuacao = Pontuacao(
+        id: _pontuacao!.id,
+        usuarioId: _pontuacao!.usuarioId,
+        xpTotal: newXp,
+        nivel: newNivel,
+        streakAtual: _pontuacao!.streakAtual,
+        streakMaximo: _pontuacao!.streakMaximo,
+        desafioRelampagoDisponivel: false,
+        desafioRelampagoCompletadoEm: DateTime.now(),
+      );
+      _lightningChallengeStatus = 'completado';
+      notifyListeners();
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('lightning_challenge_completed_at_$colabId', nowStr);
+      
+      if (!isMock) {
+        final url = Uri.parse('http://localhost:8000/api/desafio-relampago/completar');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'usuario_id': colabId,
+            'acertos': acertos,
+            'total': total,
+            'xp_ganho': xpGanho
+          }),
+        ).timeout(const Duration(seconds: 4));
+        print('Conclusão do desafio relâmpago salva no backend: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Erro ao registrar conclusão do desafio relâmpago: $e');
     }
   }
 }

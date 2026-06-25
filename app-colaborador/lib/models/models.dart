@@ -11,6 +11,7 @@ class Colaborador {
   final bool metaDiariaDefinida;
   final String? corMascote;
   final String? fotoUrl;
+  final bool onboardingCompleto;
 
   Colaborador({
     required this.id,
@@ -25,6 +26,7 @@ class Colaborador {
     this.metaDiariaDefinida = false,
     this.corMascote,
     this.fotoUrl,
+    this.onboardingCompleto = false,
   });
 
   factory Colaborador.fromJson(Map<String, dynamic> json) {
@@ -41,6 +43,7 @@ class Colaborador {
       metaDiariaDefinida: json['meta_diaria_definida'] as bool? ?? false,
       corMascote: json['cor_mascote'] as String?,
       fotoUrl: json['foto_url'] as String?,
+      onboardingCompleto: json['onboarding_completo'] as bool? ?? false,
     );
   }
 }
@@ -133,6 +136,7 @@ class Pergunta {
   final String alternativaD;
   final String respostaCorreta; // 'A', 'B', 'C', 'D'
   final String? explicacao;
+  final String? dificuldade;
 
   Pergunta({
     required this.id,
@@ -144,6 +148,7 @@ class Pergunta {
     required this.alternativaD,
     required this.respostaCorreta,
     this.explicacao,
+    this.dificuldade,
   });
 
   factory Pergunta.fromJson(Map<String, dynamic> json) {
@@ -157,6 +162,7 @@ class Pergunta {
       alternativaD: json['alternativa_d'] as String,
       respostaCorreta: json['resposta_correta'] as String,
       explicacao: json['explicacao'] as String?,
+      dificuldade: json['dificuldade'] as String?,
     );
   }
 }
@@ -203,6 +209,8 @@ class Pontuacao {
   final int nivel;
   final int streakAtual;
   final int streakMaximo;
+  final bool desafioRelampagoDisponivel;
+  final DateTime? desafioRelampagoCompletadoEm;
 
   Pontuacao({
     required this.id,
@@ -211,6 +219,8 @@ class Pontuacao {
     required this.nivel,
     required this.streakAtual,
     required this.streakMaximo,
+    this.desafioRelampagoDisponivel = true,
+    this.desafioRelampagoCompletadoEm,
   });
 
   factory Pontuacao.fromJson(Map<String, dynamic> json) {
@@ -221,6 +231,10 @@ class Pontuacao {
       nivel: json['nivel'] as int? ?? 1,
       streakAtual: json['streak_atual'] as int? ?? 0,
       streakMaximo: json['streak_maximo'] as int? ?? 0,
+      desafioRelampagoDisponivel: json['desafio_relampago_disponivel'] as bool? ?? true,
+      desafioRelampagoCompletadoEm: json['desafio_relampago_completado_em'] != null
+          ? DateTime.parse(json['desafio_relampago_completado_em'] as String)
+          : null,
     );
   }
 }
@@ -322,3 +336,58 @@ class DailyMission {
     this.xpReward = 100,
   });
 }
+
+class TreinaMaisItem {
+  final String id;
+  final String empresaId;
+  final String tipo; // 'dica' | 'pergunta'
+  final String? categoriaId;
+  final String? categoriaNome;
+  final String? textoDica;
+  final String? pergunta;
+  final List<String>? alternativas;
+  final String? respostaCorreta;
+  final String? explicacao;
+  final String criadoPor;
+  final bool visto;
+  final DateTime criadoEm;
+
+  TreinaMaisItem({
+    required this.id,
+    required this.empresaId,
+    required this.tipo,
+    this.categoriaId,
+    this.categoriaNome,
+    this.textoDica,
+    this.pergunta,
+    this.alternativas,
+    this.respostaCorreta,
+    this.explicacao,
+    required this.criadoPor,
+    required this.visto,
+    required this.criadoEm,
+  });
+
+  factory TreinaMaisItem.fromJson(Map<String, dynamic> json) {
+    return TreinaMaisItem(
+      id: json['id'] as String,
+      empresaId: json['empresa_id'] as String,
+      tipo: json['tipo'] as String,
+      categoriaId: json['categoria_id'] as String?,
+      categoriaNome: json['categoria_nome'] as String?,
+      textoDica: json['texto_dica'] as String?,
+      pergunta: json['pergunta'] as String?,
+      alternativas: json['alternativas'] != null
+          ? List<String>.from(json['alternativas'] as List)
+          : null,
+      respostaCorreta: json['resposta_correta'] as String?,
+      explicacao: json['explicacao'] as String?,
+      criadoPor: json['criado_por'] as String? ?? 'ia',
+      visto: json['visto'] as bool? ?? false,
+      criadoEm: json['criado_em'] != null
+          ? DateTime.parse(json['criado_em'] as String)
+          : DateTime.now(),
+    );
+  }
+}
+

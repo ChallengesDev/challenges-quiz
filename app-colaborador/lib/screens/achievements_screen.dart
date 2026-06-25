@@ -19,7 +19,7 @@ class AchievementsScreen extends StatelessWidget {
         backgroundColor: const Color(0xffFAF9F6),
         elevation: 0,
         title: const Text(
-          'Minhas Insígnias',
+          'Minhas Conquistas',
           style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 20, fontFamily: 'Outfit'),
         ),
         centerTitle: false,
@@ -50,27 +50,16 @@ class AchievementsScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
 
-                      // Grid of Achievements
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          // Adapt columns to screen width (Responsive grid)
-                          int crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
-                          return GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: conquistas.length,
-                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 0.82,
-                            ),
-                            itemBuilder: (context, index) {
-                              final conquista = conquistas[index];
-                              final isUnlocked = unlockedIds.contains(conquista.id);
-                              return _buildAchievementCard(context, conquista, isUnlocked);
-                            },
-                          );
+                      // List of Achievements
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: conquistas.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final conquista = conquistas[index];
+                          final isUnlocked = unlockedIds.contains(conquista.id);
+                          return _buildAchievementCard(context, conquista, isUnlocked, profileProvider);
                         },
                       ),
                     ],
@@ -131,7 +120,7 @@ class AchievementsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Mestre Colecionador',
+                  'Resumo de Conquistas',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -156,7 +145,12 @@ class AchievementsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAchievementCard(BuildContext context, Conquista conquista, bool isUnlocked) {
+  Widget _buildAchievementCard(
+    BuildContext context,
+    Conquista conquista,
+    bool isUnlocked,
+    ProfileProvider profileProvider,
+  ) {
     // Check if the achievement is secret and locked
     final isSecret = conquista.descricao.contains('Segredo') || conquista.nome.contains('Segredo');
     final shouldHideDetails = isSecret && !isUnlocked;
@@ -167,109 +161,224 @@ class AchievementsScreen extends StatelessWidget {
 
     return InkWell(
       onTap: () => _showAchievementDetail(context, displayName, displayDesc, displayIcon, isUnlocked, isSecret),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          color: isUnlocked ? Colors.white : const Color(0xffFAF9F6),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isUnlocked ? const Color(0xff6B5FD3).withOpacity(0.4) : const Color(0xffE2E2E6),
-            width: 1.5,
+            width: 1.0,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: isUnlocked ? const Color(0xff6B5FD3).withOpacity(0.04) : Colors.black.withOpacity(0.02),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            )
-          ],
+          boxShadow: isUnlocked
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  )
+                ]
+              : null,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
           children: [
-            // Badge Icon Area
+            // Left: Icon area (40x40px)
             Container(
-              width: 60,
-              height: 60,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: isUnlocked
                     ? const Color(0xff6B5FD3).withOpacity(0.08)
-                    : const Color(0xffFAF9F6),
+                    : const Color(0xffE5E5E5).withOpacity(0.4),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: isUnlocked ? const Color(0xff6B5FD3) : const Color(0xffE2E2E6),
-                  width: 1.5,
+                  width: 1.0,
                 ),
               ),
               child: Center(
-                child: Text(
-                  displayIcon,
-                  style: TextStyle(
-                    fontSize: 28,
-                    color: isUnlocked ? null : Colors.grey.withOpacity(0.5),
+                child: Opacity(
+                  opacity: isUnlocked ? 1.0 : 0.35,
+                  child: Text(
+                    displayIcon,
+                    style: const TextStyle(
+                      fontSize: 20,
+                    ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-            // Title
-            Text(
-              displayName,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: isUnlocked ? const Color(0xff2D2D3A) : const Color(0xff6B6B76),
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 4),
-            // Description
+            const SizedBox(width: 12),
+            
+            // Middle: Title + short description
             Expanded(
-              child: Text(
-                displayDesc,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: isUnlocked ? const Color(0xff6B6B76) : const Color(0xff6B6B76).withOpacity(0.7),
-                  fontSize: 10,
-                  height: 1.3,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            // Unlocked indicator
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: isUnlocked ? const Color(0xff3B7DD8).withOpacity(0.1) : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    isUnlocked ? Icons.check_circle : Icons.lock_outline,
-                    color: isUnlocked ? const Color(0xff3B7DD8) : const Color(0xff6B6B76),
-                    size: 10,
-                  ),
-                  const SizedBox(width: 4),
                   Text(
-                    isUnlocked ? 'Desbloqueada' : 'Bloqueada',
+                    displayName,
                     style: TextStyle(
-                      color: isUnlocked ? const Color(0xff3B7DD8) : const Color(0xff6B6B76),
-                      fontSize: 8,
+                      color: isUnlocked ? const Color(0xff2D2D3A) : const Color(0xff6B6B76),
                       fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontFamily: 'Outfit',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    displayDesc,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isUnlocked ? const Color(0xff6B6B76) : const Color(0xff6B6B76).withOpacity(0.7),
+                      fontSize: 11,
+                      height: 1.25,
                     ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 12),
+            
+            // Right: Status / Progress
+            _buildProgressOrStatus(conquista, isUnlocked, profileProvider),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildProgressOrStatus(Conquista conquista, bool isUnlocked, ProfileProvider profileProvider) {
+    if (isUnlocked) {
+      String displayDate = '20/06';
+      if (conquista.id == 'c1') displayDate = '18/06';
+      if (conquista.id == 'c3') displayDate = '20/06';
+      if (conquista.id == 'c4') displayDate = '22/06';
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xffE6F4EA),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Color(0xff137333),
+                  size: 11,
+                ),
+                SizedBox(width: 4),
+                Text(
+                  'Desbloqueada',
+                  style: TextStyle(
+                    color: Color(0xff137333),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              displayDate,
+              style: const TextStyle(
+                color: Color(0xff137333),
+                fontSize: 8,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Locked achievements: progress visualization
+    if (conquista.id == 'c2') {
+      // Mente Brilhante: 80% progress
+      return SizedBox(
+        width: 80,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '80% (Alvo 100%)',
+              style: TextStyle(color: Color(0xff6B6B76), fontSize: 8, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: const LinearProgressIndicator(
+                value: 0.8,
+                minHeight: 4,
+                backgroundColor: Color(0xffE5E5E5),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xff3B7DD8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (conquista.id == 'c4') {
+      // Sem Parar: 3/5 dias progress
+      final currentStreak = profileProvider.pontuacao?.streakAtual ?? 0;
+      final progressVal = (currentStreak / 5.0).clamp(0.0, 1.0);
+      return SizedBox(
+        width: 80,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$currentStreak/5 dias',
+              style: const TextStyle(color: Color(0xff6B6B76), fontSize: 8, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progressVal,
+                minHeight: 4,
+                backgroundColor: const Color(0xffE5E5E5),
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xff3B7DD8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Default locked state
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xffE5E5E5).withOpacity(0.3),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.lock_outline,
+            color: Color(0xff6B6B76),
+            size: 11,
+          ),
+          SizedBox(width: 4),
+          Text(
+            'Bloqueada',
+            style: TextStyle(
+              color: Color(0xff6B6B76),
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -306,9 +415,12 @@ class AchievementsScreen extends StatelessWidget {
                     ),
                   ),
                   child: Center(
-                    child: Text(
-                      icon,
-                      style: const TextStyle(fontSize: 44),
+                    child: Opacity(
+                      opacity: isUnlocked ? 1.0 : 0.35,
+                      child: Text(
+                        icon,
+                        style: const TextStyle(fontSize: 44),
+                      ),
                     ),
                   ),
                 ),
@@ -388,10 +500,10 @@ class AchievementsScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.stars_outlined, color: const Color(0xffE2E2E6), size: 80),
+            const Icon(Icons.stars_outlined, color: Color(0xffE2E2E6), size: 80),
             const SizedBox(height: 16),
             const Text(
-              'Nenhuma insígnia encontrada',
+              'Nenhuma conquista encontrada',
               style: TextStyle(color: Color(0xff2D2D3A), fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),

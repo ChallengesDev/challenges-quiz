@@ -89,6 +89,31 @@ class GerarPerguntasRequest(BaseModel):
     dificuldade: str
     contexto: Optional[str] = None
 
+class GerarTreinaMaisRequest(BaseModel):
+    tema: str
+    quantidade: int = 10
+    contexto: Optional[str] = None
+
+class TreinaMaisItemBulk(BaseModel):
+    tipo: str
+    texto_dica: Optional[str] = None
+    pergunta: Optional[str] = None
+    alternativas: Optional[List[str]] = None
+    resposta_correta: Optional[str] = None
+    explicacao: Optional[str] = None
+    categoria_id: Optional[str] = None
+    criado_por: str = "ia"
+
+class TreinaMaisBulkRequest(BaseModel):
+    empresa_id: str
+    itens: List[TreinaMaisItemBulk]
+
+class ResponderPerguntaTreinaMaisRequest(BaseModel):
+    usuario_id: str
+    conteudo_id: str
+    resposta_usuario: str
+
+
 # Rotas do App
 @app.get("/")
 def read_root():
@@ -1169,6 +1194,647 @@ async def notification_scheduler():
             print("[Scheduler] Erro no loop de agendamentos:", e)
             
         await asyncio.sleep(10)
+
+
+def _gerar_mock_treina_mais(tema: str, quantidade: int) -> list:
+    tema_lower = tema.lower()
+    
+    # Pre-canned items based on keywords
+    mock_dicas = []
+    mock_perguntas = []
+    
+    if "lgpd" in tema_lower or "dados" in tema_lower or "privacidade" in tema_lower:
+        mock_dicas = [
+            {
+                "tipo": "dica",
+                "texto_dica": "O consentimento sob a LGPD deve ser livre, informado e inequívoco. Isso significa que caixas pré-marcadas em formulários de aceite não são mais válidas!",
+                "explicacao": "O usuário deve ativamente marcar a caixa indicando sua concordância com o tratamento de seus dados.",
+                "criado_por": "ia"
+            },
+            {
+                "tipo": "dica",
+                "texto_dica": "Dados pessoais sensíveis (origem racial, convicção religiosa, dados de saúde, etc.) possuem regras muito mais rígidas para tratamento na LGPD.",
+                "explicacao": "O tratamento desses dados exige consentimento específico e destacado do titular, exceto em hipóteses legais específicas.",
+                "criado_por": "ia"
+            },
+            {
+                "tipo": "dica",
+                "texto_dica": "Em caso de vazamento de dados, a empresa deve comunicar a ANPD e os titulares afetados em tempo razoável, explicando os riscos envolvidos.",
+                "explicacao": "A comunicação rápida ajuda a mitigar danos e é uma obrigação expressa no artigo 48 da LGPD.",
+                "criado_por": "ia"
+            }
+        ]
+        mock_perguntas = [
+            {
+                "tipo": "pergunta",
+                "pergunta": "Quem é o encarregado de dados (DPO) segundo a LGPD?",
+                "alternativas": [
+                    "O profissional que executa diretamente o tratamento de dados no dia a dia.",
+                    "O canal de comunicação entre o controlador, os titulares dos dados e a ANPD.",
+                    "O representante legal da empresa perante a Receita Federal.",
+                    "O profissional de TI que realiza o backup dos servidores da empresa."
+                ],
+                "resposta_correta": "O canal de comunicação entre o controlador, os titulares dos dados e a ANPD.",
+                "explicacao": "O Encarregado pelo Tratamento de Dados Pessoais (DPO) atua como ponte de comunicação entre a organização, os titulares e o órgão regulador (ANPD).",
+                "criado_por": "ia"
+            },
+            {
+                "tipo": "pergunta",
+                "pergunta": "O que são dados anonimizados perante a LGPD?",
+                "alternativas": [
+                    "Dados criptografados que podem ser descriptografados a qualquer momento.",
+                    "Dados relativos a um titular que não possa ser identificado, considerando meios técnicos razoáveis.",
+                    "Dados armazenados em servidores localizados fora do território nacional.",
+                    "Dados compartilhados com parceiros comerciais de confiança."
+                ],
+                "resposta_correta": "Dados relativos a um titular que não possa ser identificado, considerando meios técnicos razoáveis.",
+                "explicacao": "Se um dado perder a possibilidade de associação, direta ou indireta, a um indivíduo, ele é considerado anonimizado e não se submete à LGPD.",
+                "criado_por": "ia"
+            }
+        ]
+    elif "segurança" in tema_lower or "phishing" in tema_lower or "senha" in tema_lower or "ataque" in tema_lower:
+        mock_dicas = [
+            {
+                "tipo": "dica",
+                "texto_dica": "Sempre desconfie de links recebidos por e-mail com senso de urgência ('Sua conta será bloqueada hoje!'). Esse é o gatilho mental mais comum no Phishing.",
+                "explicacao": "Os criminosos tentam apressar a vítima para que ela aja por impulso sem verificar a autenticidade do e-mail.",
+                "criado_por": "ia"
+            },
+            {
+                "tipo": "dica",
+                "texto_dica": "A Autenticação de Dois Fatores (MFA) cria uma camada extra de segurança. Mesmo que alguém descubra sua senha, não conseguirá acessar sua conta sem o segundo fator.",
+                "explicacao": "MFA reduz drasticamente a chance de invasões por vazamentos de senhas corporativas.",
+                "criado_por": "ia"
+            },
+            {
+                "tipo": "dica",
+                "texto_dica": "Nunca compartilhe senhas corporativas nem use a mesma credencial em múltiplos serviços. Se um serviço sofrer vazamento, todas as suas contas estarão vulneráveis.",
+                "explicacao": "A reutilização de senhas é uma das maiores brechas de segurança cibernética modernas.",
+                "criado_por": "ia"
+            }
+        ]
+        mock_perguntas = [
+            {
+                "tipo": "pergunta",
+                "pergunta": "Você recebe um e-mail urgente da 'equipe de TI' pedindo sua senha para atualizar a conta. O que você deve fazer?",
+                "alternativas": [
+                    "Responder imediatamente enviando a senha para evitar bloqueios.",
+                    "Enviar a senha mas pedir para eles alterarem logo depois.",
+                    "Ignorar e reportar o e-mail à equipe de segurança oficial de TI.",
+                    "Compartilhar o e-mail com todos os colegas de equipe perguntando o que fazer."
+                ],
+                "resposta_correta": "Ignorar e reportar o e-mail à equipe de segurança oficial de TI.",
+                "explicacao": "Equipes de TI legítimas NUNCA solicitam senhas por e-mail. Este é um golpe clássico de Phishing/Engenharia Social.",
+                "criado_por": "ia"
+            },
+            {
+                "tipo": "pergunta",
+                "pergunta": "Qual das seguintes opções descreve uma senha corporativa forte e recomendada?",
+                "alternativas": [
+                    "A data de nascimento do seu pet mais querido.",
+                    "Uma frase longa e aleatória (passphrase) contendo números, letras e símbolos.",
+                    "A palavra 'Senha123' que é fácil de memorizar e alterar.",
+                    "O nome da sua empresa atual seguido do ano de contratação."
+                ],
+                "resposta_correta": "Uma frase longa e aleatória (passphrase) contendo números, letras e símbolos.",
+                "explicacao": "Senhas longas baseadas em frases de fácil memorização pessoal combinadas com caracteres especiais são extremamente difíceis de quebrar por força bruta.",
+                "criado_por": "ia"
+            }
+        ]
+    else:
+        # Default fallback items for any other topic
+        mock_dicas = [
+            {
+                "tipo": "dica",
+                "texto_dica": f"Para se aprimorar em {tema}, a prática constante e o alinhamento com a cultura interna são fundamentais para o sucesso corporativo.",
+                "explicacao": "A capacitação contínua ajuda no crescimento pessoal e na melhoria dos indicadores organizacionais.",
+                "criado_por": "ia"
+            },
+            {
+                "tipo": "dica",
+                "texto_dica": f"A clareza operacional sobre o tema {tema} reduz retrabalhos e minimiza falhas humanas nas rotinas diárias da equipe.",
+                "explicacao": "Processos estruturados e documentados servem como base confiável para novos colaboradores.",
+                "criado_por": "ia"
+            }
+        ]
+        mock_perguntas = [
+            {
+                "tipo": "pergunta",
+                "pergunta": f"Qual o principal benefício de dominar os conceitos básicos de {tema}?",
+                "alternativas": [
+                    "Aumento da produtividade e redução de riscos operacionais na empresa.",
+                    "Automatização total de todas as decisões sem supervisão humana.",
+                    "Eliminação completa de qualquer tipo de auditoria interna ou externa.",
+                    "Diminuição dos canais de comunicação com outras áreas de apoio."
+                ],
+                "resposta_correta": "Aumento da produtividade e redução de riscos operacionais na empresa.",
+                "explicacao": "O conhecimento aprofundado permite tomar decisões mais seguras, rápidas e eficientes no ambiente de trabalho.",
+                "criado_por": "ia"
+            }
+        ]
+        
+    # Interleave to generate requested quantity
+    resultado = []
+    dica_idx = 0
+    pergunta_idx = 0
+    for i in range(quantidade):
+        # alternate dica and pergunta
+        if i % 2 == 0 and len(mock_dicas) > 0:
+            item = mock_dicas[dica_idx % len(mock_dicas)].copy()
+            dica_idx += 1
+        elif len(mock_perguntas) > 0:
+            item = mock_perguntas[pergunta_idx % len(mock_perguntas)].copy()
+            pergunta_idx += 1
+        else:
+            item = mock_dicas[dica_idx % len(mock_dicas)].copy()
+            dica_idx += 1
+            
+        # personalize fallback output if general
+        if "{tema}" in item.get("texto_dica", ""):
+            item["texto_dica"] = item["texto_dica"].replace("{tema}", tema)
+        if "{tema}" in item.get("pergunta", ""):
+            item["pergunta"] = item["pergunta"].replace("{tema}", tema)
+        if "{tema}" in item.get("explicacao", ""):
+            item["explicacao"] = item["explicacao"].replace("{tema}", tema)
+            
+        resultado.append(item)
+        
+    return resultado
+
+
+@app.post("/api/treina-mais/gerar")
+def gerar_treina_mais(request: GerarTreinaMaisRequest):
+    try:
+        if not GEMINI_API_KEY:
+            print("Chave GEMINI_API_KEY não configurada. Usando mock generator.")
+            return _gerar_mock_treina_mais(request.tema, request.quantidade)
+            
+        prompt = f"""
+Gere exatamente {request.quantidade} cartões de aprendizagem rápida e engajadora sobre o tema: "{request.tema}".
+{f'Diretrizes ou contexto adicional: {request.contexto}' if request.contexto else ''}
+
+Esses cartões devem ser do tipo "dica" ou "pergunta" (intercale de forma dinâmica, visando um equilíbrio próximo de 50/50).
+Retorne um array JSON no formato exato:
+[
+  {{
+    "tipo": "dica",
+    "texto_dica": "Texto curto e direto da dica (máximo 2 a 3 frases) com uma curiosidade ou insight valioso.",
+    "explicacao": "Uma justificativa ou detalhe extra curto de 1 frase.",
+    "criado_por": "ia"
+  }},
+  {{
+    "tipo": "pergunta",
+    "pergunta": "Texto da pergunta direta de múltipla escolha?",
+    "alternativas": ["Opção A", "Opção B", "Opção C", "Opção D"],
+    "resposta_correta": "Opção B",
+    "explicacao": "Justificativa curta e direta de 1 frase explicando por que esta é a alternativa correta.",
+    "criado_por": "ia"
+  }}
+]
+
+Regras importantes:
+- A propriedade "tipo" deve ser exatamente "dica" ou "pergunta".
+- Para o tipo "dica", as propriedades "texto_dica" e "explicacao" são obrigatórias. "pergunta", "alternativas" e "resposta_correta" devem ser nulas.
+- Para o tipo "pergunta", as propriedades "pergunta", "alternativas", "resposta_correta" e "explicacao" são obrigatórias. As "alternativas" devem ser uma lista com 2, 3 ou 4 opções de strings. E a "resposta_correta" deve ser a string exata correspondente a uma das opções do array de alternativas. "texto_dica" devem ser nulas.
+- As dicas e perguntas devem ser dinâmicas, modernas, adequadas para leitura mobile no estilo Reels/TikTok (diretas, dinâmicas e engajadoras).
+- Não retorne nenhum outro texto explicativo antes ou depois do JSON. Retorne apenas o array JSON puro.
+- Idioma: Português (Brasil).
+"""
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            import json
+            itens = json.loads(response.text)
+            return itens
+        except Exception as api_err:
+            print(f"Alerta: Falha na chamada da API do Gemini ({str(api_err)}). Usando gerador mock inteligente local.")
+            return _gerar_mock_treina_mais(request.tema, request.quantidade)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao gerar conteúdo Treina+ com IA: {str(e)}"
+        )
+
+
+@app.post("/api/treina-mais/bulk", status_code=201)
+def bulk_inserir_treina_mais(request: TreinaMaisBulkRequest):
+    try:
+        to_insert = []
+        for item in request.itens:
+            # Garante que o tipo é válido
+            tipo = item.tipo if item.tipo in ('dica', 'pergunta') else 'dica'
+            
+            # Se for categoria_id vazia ou nula, definir None
+            cat_id = item.categoria_id if item.categoria_id else None
+            
+            data = {
+                "empresa_id": request.empresa_id,
+                "tipo": tipo,
+                "categoria_id": cat_id,
+                "texto_dica": item.texto_dica if tipo == 'dica' else None,
+                "pergunta": item.pergunta if tipo == 'pergunta' else None,
+                "alternativas": item.alternativas if tipo == 'pergunta' else None,
+                "resposta_correta": item.resposta_correta if tipo == 'pergunta' else None,
+                "explicacao": item.explicacao,
+                "criado_por": item.criado_por if item.criado_por in ('gestor', 'ia') else 'ia',
+                "ativo": True
+            }
+            to_insert.append(data)
+            
+        if to_insert:
+            response = supabase.table("treina_mais_conteudo").insert(to_insert).execute()
+            return {"status": "success", "inserted": len(to_insert), "data": response.data}
+        return {"status": "success", "inserted": 0, "data": []}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao inserir conteúdo em lote: {str(e)}")
+
+
+@app.get("/api/treina-mais/feed/{usuario_id}")
+def obter_feed_treina_mais(usuario_id: str):
+    try:
+        # Busca o usuario
+        user_res = supabase.table("usuarios").select("empresa_id").eq("id", usuario_id).execute()
+        if not user_res.data:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+        empresa_id = user_res.data[0]["empresa_id"]
+        
+        # Busca vistos
+        seen_res = supabase.table("usuario_treina_mais_visto").select("conteudo_id").eq("usuario_id", usuario_id).execute()
+        seen_ids = [s["conteudo_id"] for s in seen_res.data or []]
+        
+        # Busca todos os conteúdos ativos da empresa
+        contents_res = supabase.table("treina_mais_conteudo").select("*, categorias(nome)").eq("empresa_id", empresa_id).eq("ativo", True).execute()
+        all_contents = contents_res.data or []
+        
+        unseen = [c for c in all_contents if c["id"] not in seen_ids]
+        seen = [c for c in all_contents if c["id"] in seen_ids]
+        
+        # Prioriza não vistos no feed
+        feed = []
+        for item in (unseen + seen):
+            categoria_nome = None
+            if item.get("categorias"):
+                if isinstance(item["categorias"], dict):
+                    categoria_nome = item["categorias"].get("nome")
+                elif isinstance(item["categorias"], list) and len(item["categorias"]) > 0:
+                    categoria_nome = item["categorias"][0].get("nome")
+            
+            feed.append({
+                "id": item["id"],
+                "empresa_id": item["empresa_id"],
+                "tipo": item["tipo"],
+                "categoria_id": item["categoria_id"],
+                "categoria_nome": categoria_nome,
+                "texto_dica": item["texto_dica"],
+                "pergunta": item["pergunta"],
+                "alternativas": item["alternativas"],
+                "resposta_correta": item["resposta_correta"],
+                "explicacao": item["explicacao"],
+                "criado_por": item["criado_por"],
+                "visto": item["id"] in seen_ids,
+                "criado_em": item["criado_em"]
+            })
+            
+        return feed
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao obter feed: {str(e)}")
+
+
+@app.post("/api/treina-mais/ver/{usuario_id}/{conteudo_id}")
+def registrar_visualizacao(usuario_id: str, conteudo_id: str):
+    try:
+        data = {
+            "usuario_id": usuario_id,
+            "conteudo_id": conteudo_id,
+            "visto_em": datetime.now(timezone.utc).isoformat()
+        }
+        response = supabase.table("usuario_treina_mais_visto").upsert(data, on_conflict="usuario_id, conteudo_id").execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao registrar visualização: {str(e)}")
+
+
+@app.post("/api/treina-mais/pergunta/responder")
+def responder_pergunta_treina_mais(request: ResponderPerguntaTreinaMaisRequest):
+    try:
+        # Busca o conteúdo para validar a resposta
+        conteudo_res = supabase.table("treina_mais_conteudo").select("*").eq("id", request.conteudo_id).execute()
+        if not conteudo_res.data:
+            raise HTTPException(status_code=404, detail="Conteúdo não encontrado.")
+        
+        conteudo = conteudo_res.data[0]
+        if conteudo["tipo"] != "pergunta":
+            raise HTTPException(status_code=400, detail="Este conteúdo não é uma pergunta.")
+            
+        resposta_correta = conteudo["resposta_correta"]
+        explicacao = conteudo["explicacao"]
+        
+        is_correct = request.resposta_usuario.strip() == resposta_correta.strip()
+        
+        xp_earned = 0
+        if is_correct:
+            import random
+            xp_earned = random.randint(5, 15)
+            
+            # Atualiza pontuação
+            score_res = supabase.table("pontuacoes").select("*").eq("usuario_id", request.usuario_id).execute()
+            if score_res.data:
+                curr = score_res.data[0]
+                new_xp = curr["xp_total"] + xp_earned
+                new_nivel = (new_xp // 500) + 1
+                if new_nivel < curr["nivel"]:
+                    new_nivel = curr["nivel"]
+                supabase.table("pontuacoes").update({
+                    "xp_total": new_xp,
+                    "nivel": new_nivel
+                }).eq("usuario_id", request.usuario_id).execute()
+            else:
+                supabase.table("pontuacoes").insert({
+                    "usuario_id": request.usuario_id,
+                    "xp_total": xp_earned,
+                    "nivel": 1,
+                    "streak_atual": 0,
+                    "streak_maximo": 0
+                }).execute()
+        
+        # Registra visualização (visto)
+        visto_data = {
+            "usuario_id": request.usuario_id,
+            "conteudo_id": request.conteudo_id,
+            "visto_em": datetime.now(timezone.utc).isoformat()
+        }
+        supabase.table("usuario_treina_mais_visto").upsert(visto_data, on_conflict="usuario_id, conteudo_id").execute()
+        
+        return {
+            "correta": is_correct,
+            "resposta_correta": resposta_correta,
+            "xp_ganho": xp_earned,
+            "explicacao": explicacao
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao responder pergunta: {str(e)}")
+
+
+# --- DESAFIO RELÂMPAGO ---
+
+DESAFIO_RELAMPAGO_CACHE = {}
+
+class DesafioRelampagoCompletarRequest(BaseModel):
+    usuario_id: str
+    acertos: int
+    total: int
+    xp_ganho: int
+
+@app.get("/api/desafio-relampago/{usuario_id}")
+def obter_desafio_relampago(usuario_id: str):
+    try:
+        # 1. Determine status
+        pont_res = supabase.table("pontuacoes").select("*").eq("usuario_id", usuario_id).execute()
+        completado_em_str = None
+        disponivel_val = True
+        
+        if pont_res.data:
+            pont = pont_res.data[0]
+            if "desafio_relampago_completado_em" in pont:
+                completado_em_str = pont["desafio_relampago_completado_em"]
+            if "desafio_relampago_disponivel" in pont:
+                disponivel_val = pont["desafio_relampago_disponivel"]
+        
+        # If columns not in database, check in-memory cache
+        if completado_em_str is None and usuario_id in DESAFIO_RELAMPAGO_CACHE:
+            completado_em_str = DESAFIO_RELAMPAGO_CACHE[usuario_id].get("completado_em")
+            disponivel_val = DESAFIO_RELAMPAGO_CACHE[usuario_id].get("disponivel", True)
+            
+        completado_hoje = False
+        if completado_em_str:
+            try:
+                completado_em = datetime.fromisoformat(completado_em_str.replace("Z", "+00:00"))
+                if completado_em.date() == datetime.now(timezone.utc).date():
+                    completado_hoje = True
+            except:
+                pass
+
+        # Check if completed at least 1 normal quiz today
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        sessoes_res = supabase.table("sessoes") \
+            .select("id") \
+            .eq("usuario_id", usuario_id) \
+            .eq("concluido", True) \
+            .gte("finalizado_em", today_start.isoformat()) \
+            .execute()
+        
+        has_completed_normal_quiz = len(sessoes_res.data or []) >= 1
+        
+        status = "bloqueado"
+        if completado_hoje:
+            status = "completado"
+        elif has_completed_normal_quiz:
+            status = "disponivel"
+            
+        preguntas = []
+        if status in ("disponivel", "completado"):
+            # Lógica de seleção de perguntas
+            thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+            
+            user_sessoes_res = supabase.table("sessoes") \
+                .select("id") \
+                .eq("usuario_id", usuario_id) \
+                .gte("iniciado_em", thirty_days_ago) \
+                .execute()
+            
+            sess_ids = [s["id"] for s in user_sessoes_res.data or []]
+            
+            incorrect_q_ids = []
+            if sess_ids:
+                respostas_res = supabase.table("respostas") \
+                    .select("pergunta_id") \
+                    .in_("sessao_id", sess_ids) \
+                    .eq("correta", False) \
+                    .execute()
+                incorrect_q_ids = list(set([r["pergunta_id"] for r in respostas_res.data or []]))
+            
+            questions_list = []
+            if incorrect_q_ids:
+                q_res = supabase.table("perguntas") \
+                    .select("*, desafio:desafios(titulo, topico_id)") \
+                    .in_("id", incorrect_q_ids) \
+                    .execute()
+                questions_list = q_res.data or []
+            
+            import random
+            random.shuffle(questions_list)
+            selected_questions = questions_list[:4]
+            
+            # Top-up if less than 3 incorrect questions
+            if len(selected_questions) < 3:
+                categoria_id = None
+                last_sess_res = supabase.table("sessoes") \
+                    .select("desafio_id") \
+                    .eq("usuario_id", usuario_id) \
+                    .order("iniciado_em", desc=True) \
+                    .limit(1) \
+                    .execute()
+                
+                if last_sess_res.data:
+                    desafio_id = last_sess_res.data[0]["desafio_id"]
+                    des_res = supabase.table("desafios").select("topico_id").eq("id", desafio_id).execute()
+                    if des_res.data:
+                        topico_id = des_res.data[0]["topico_id"]
+                        top_res = supabase.table("topicos").select("categoria_id").eq("id", topico_id).execute()
+                        if top_res.data:
+                            categoria_id = top_res.data[0]["categoria_id"]
+                
+                if not categoria_id:
+                    user_res = supabase.table("usuarios").select("empresa_id").eq("id", usuario_id).execute()
+                    if user_res.data and user_res.data[0]["empresa_id"]:
+                        empresa_id = user_res.data[0]["empresa_id"]
+                        cat_res = supabase.table("categorias").select("id").eq("empresa_id", empresa_id).eq("ativo", True).limit(1).execute()
+                        if cat_res.data:
+                            categoria_id = cat_res.data[0]["id"]
+                
+                if categoria_id:
+                    topics_res = supabase.table("topicos").select("id").eq("categoria_id", categoria_id).execute()
+                    topic_ids = [t["id"] for t in topics_res.data or []]
+                    
+                    if topic_ids:
+                        chals_res = supabase.table("desafios").select("id").in_("topico_id", topic_ids).execute()
+                        chal_ids = [c["id"] for c in chals_res.data or []]
+                        
+                        if chal_ids:
+                            all_q_res = supabase.table("perguntas") \
+                                .select("*, desafio:desafios(titulo, topico_id)") \
+                                .in_("desafio_id", chal_ids) \
+                                .execute()
+                            
+                            category_questions = all_q_res.data or []
+                            random.shuffle(category_questions)
+                            
+                            existing_ids = {q["id"] for q in selected_questions}
+                            for q in category_questions:
+                                if len(selected_questions) >= 4:
+                                    break
+                                if q["id"] not in existing_ids:
+                                    selected_questions.append(q)
+            
+            topic_ids_to_resolve = list(set([q["desafio"]["topico_id"] for q in selected_questions if q.get("desafio")]))
+            category_names = {}
+            if topic_ids_to_resolve:
+                t_res = supabase.table("topicos").select("id, categoria:categorias(nome)").in_("id", topic_ids_to_resolve).execute()
+                for t in t_res.data or []:
+                    if t.get("categoria"):
+                        category_names[t["id"]] = t["categoria"]["nome"]
+            
+            for q in selected_questions:
+                topico_id = q.get("desafio", {}).get("topico_id") if q.get("desafio") else None
+                cat_name = category_names.get(topico_id, "Geral")
+                
+                preguntas.append({
+                    "id": q["id"],
+                    "texto": q["texto"],
+                    "alternativas": [
+                        q["alternativa_a"],
+                        q["alternativa_b"],
+                        q["alternativa_c"],
+                        q["alternativa_d"]
+                    ],
+                    "resposta_correta": q["resposta_correta"],
+                    "explicacao": q.get("explicacao"),
+                    "categoria": cat_name,
+                    "dificuldade": q.get("dificuldade", "facil")
+                })
+                
+        return {
+            "status": status,
+            "perguntas": preguntas
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao obter desafio relâmpago: {str(e)}")
+
+@app.post("/api/desafio-relampago/completar")
+def completar_desafio_relampago(request: DesafioRelampagoCompletarRequest):
+    try:
+        now_str = datetime.now(timezone.utc).isoformat()
+        
+        pont_res = supabase.table("pontuacoes").select("*").eq("usuario_id", request.usuario_id).execute()
+        
+        if pont_res.data:
+            pont = pont_res.data[0]
+            update_data = {
+                "xp_total": pont["xp_total"] + request.xp_ganho,
+                "nivel": ((pont["xp_total"] + request.xp_ganho) // 500) + 1
+            }
+            if "desafio_relampago_completado_em" in pont:
+                update_data["desafio_relampago_completado_em"] = now_str
+            if "desafio_relampago_disponivel" in pont:
+                update_data["desafio_relampago_disponivel"] = False
+                
+            supabase.table("pontuacoes").update(update_data).eq("usuario_id", request.usuario_id).execute()
+        else:
+            insert_data = {
+                "usuario_id": request.usuario_id,
+                "xp_total": request.xp_ganho,
+                "nivel": 1,
+                "streak_atual": 0,
+                "streak_maximo": 0
+            }
+            supabase.table("pontuacoes").insert(insert_data).execute()
+            
+        DESAFIO_RELAMPAGO_CACHE[request.usuario_id] = {
+            "completado_em": now_str,
+            "disponivel": False
+        }
+        
+        return {"status": "success", "message": "Desafio relâmpago registrado com sucesso!"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao registrar conclusão do desafio relâmpago: {str(e)}")
+
+
+ONBOARDING_CACHE = {}
+
+@app.get("/api/usuarios/{usuario_id}/onboarding")
+def obter_onboarding_status(usuario_id: str):
+    try:
+        res = supabase.table("usuarios").select("onboarding_completo").eq("id", usuario_id).execute()
+        if res.data:
+            val = res.data[0].get("onboarding_completo", False)
+            return {"onboarding_completo": bool(val)}
+    except Exception as e:
+        print(f"Erro ao buscar onboarding_completo no banco (possivelmente coluna nao existe): {e}")
+    
+    val = ONBOARDING_CACHE.get(usuario_id, False)
+    return {"onboarding_completo": val}
+
+@app.post("/api/usuarios/{usuario_id}/onboarding")
+def atualizar_onboarding_status(usuario_id: str, payload: dict):
+    onboarding_val = payload.get("onboarding_completo", True)
+    
+    db_success = False
+    try:
+        res = supabase.table("usuarios").update({"onboarding_completo": onboarding_val}).eq("id", usuario_id).execute()
+        if res.data:
+            db_success = True
+    except Exception as e:
+        print(f"Erro ao salvar onboarding_completo no banco: {e}")
+    
+    ONBOARDING_CACHE[usuario_id] = onboarding_val
+    return {"success": True, "db_saved": db_success, "onboarding_completo": onboarding_val}
 
 
 # Startup Event para iniciar o Scheduler

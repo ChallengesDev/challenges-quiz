@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import '../models/models.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -34,6 +35,7 @@ class AuthProvider extends ChangeNotifier {
         final Map<String, dynamic> data = jsonDecode(mockSessionStr);
         _session = null; // não há sessão Supabase real
         _isMock = true;
+        final bool mockOnboarding = prefs.getBool('onboarding_completo_${data['id']}') ?? false;
         _colaborador = Colaborador(
           id: data['id'],
           nome: data['nome'],
@@ -45,6 +47,7 @@ class AuthProvider extends ChangeNotifier {
           empresaId: data['empresa_id'] ?? 'mock-company-123',
           corMascote: data['cor_mascote'],
           fotoUrl: data['foto_url'],
+          onboardingCompleto: mockOnboarding,
         );
         _loading = false;
         notifyListeners();
@@ -73,16 +76,46 @@ class AuthProvider extends ChangeNotifier {
           .eq('id', userId)
           .single();
 
-      _colaborador = Colaborador.fromJson(response);
+      bool onboardingCompleto = false;
+      if (response.containsKey('onboarding_completo') && response['onboarding_completo'] != null) {
+        onboardingCompleto = response['onboarding_completo'] as bool;
+      } else {
+        // Fallback para API do backend se a coluna não estiver mapeada/presente no select do Supabase
+        try {
+          final url = Uri.parse('http://localhost:8000/api/usuarios/$userId/onboarding');
+          final apiRes = await http.get(url).timeout(const Duration(seconds: 3));
+          if (apiRes.statusCode == 200) {
+            final decoded = json.decode(utf8.decode(apiRes.bodyBytes));
+            onboardingCompleto = decoded['onboarding_completo'] as bool? ?? false;
+          }
+        } catch (apiErr) {
+          print('Erro ao consultar onboarding no backend: $apiErr');
+        }
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final localOnboarding = prefs.getBool('onboarding_completo_$userId') ?? false;
+      if (localOnboarding) {
+        onboardingCompleto = true;
+      }
+
+      final Map<String, dynamic> colabMap = Map<String, dynamic>.from(response);
+      colabMap['onboarding_completo'] = onboardingCompleto;
+
+      _colaborador = Colaborador.fromJson(colabMap);
     } catch (e) {
       print('Erro ao carregar perfil do Supabase: $e');
       // Fallback em caso de erro de RLS ou offline
+      final prefs = await SharedPreferences.getInstance();
+      final localOnboarding = prefs.getBool('onboarding_completo_$userId') ?? false;
+      
       _colaborador = Colaborador(
         id: userId,
         nome: _supabase.auth.currentUser?.userMetadata?['nome'] ?? 'Colaborador',
         email: _supabase.auth.currentUser?.email ?? '',
         ativo: true,
         primeiroAcesso: false,
+        onboardingCompleto: localOnboarding,
       );
     }
   }
@@ -113,6 +146,7 @@ class AuthProvider extends ChangeNotifier {
         print('Erro ao salvar cache de mock: $e');
       }
 
+      final bool mockOnboarding = prefs.getBool('onboarding_completo_${mockData['id']}') ?? false;
       _session = null;
       _isMock = true;
       _colaborador = Colaborador(
@@ -126,6 +160,7 @@ class AuthProvider extends ChangeNotifier {
         empresaId: 'mock-company-123',
         corMascote: mockData['cor_mascote'] as String?,
         fotoUrl: mockData['foto_url'] as String?,
+        onboardingCompleto: mockOnboarding,
       );
 
       if (!mockResetDone) {
@@ -274,6 +309,7 @@ class AuthProvider extends ChangeNotifier {
         metaDiariaDefinida: _colaborador!.metaDiariaDefinida,
         corMascote: color,
         fotoUrl: _colaborador!.fotoUrl,
+        onboardingCompleto: _colaborador!.onboardingCompleto,
       );
       notifyListeners();
     } catch (e) {
@@ -317,10 +353,72 @@ class AuthProvider extends ChangeNotifier {
         metaDiariaDefinida: _colaborador!.metaDiariaDefinida,
         corMascote: _colaborador!.corMascote,
         fotoUrl: url,
+        onboardingCompleto: _colaborador!.onboardingCompleto,
       );
       notifyListeners();
     } catch (e) {
       print('Erro ao atualizar foto de perfil: $e');
+    }
+  }
+
+  Future<void> completeOnboardingTour() async {
+    if (_colaborador == null) return;
+    
+    final updatedColab = Colaborador(
+      id: _colaborador!.id,
+      nome: _colaborador!.nome,
+      email: _colaborador!.email,
+      cargo: _colaborador!.cargo,
+      departamento: _colaborador!.departamento,
+      ativo: _colaborador!.ativo,
+      primeiroAcesso: _colaborador!.primeiroAcesso,
+      empresaId: _colaborador!.empresaId,
+      metaDiaria: _colaborador!.metaDiaria,
+      metaDiariaDefinida: _colaborador!.metaDiariaDefinida,
+      corMascote: _colaborador!.corMascote,
+      fotoUrl: _colaborador!.fotoUrl,
+      onboardingCompleto: true,
+    );
+    
+    _colaborador = updatedColab;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('onboarding_completo_${updatedColab.id}', true);
+      
+      final mockSessionStr = prefs.getString('mock_colab_session');
+      if (mockSessionStr != null) {
+        final Map<String, dynamic> data = jsonDecode(mockSessionStr);
+        data['onboarding_completo'] = true;
+        await prefs.setString('mock_colab_session', jsonEncode(data));
+      }
+    } catch (e) {
+      print('Erro ao salvar onboarding localmente: $e');
+    }
+
+    if (!_isMock) {
+      try {
+        await _supabase
+            .from('usuarios')
+            .update({'onboarding_completo': true})
+            .eq('id', updatedColab.id);
+        print('Onboarding marcado como completo no Supabase.');
+      } catch (e) {
+        print('Erro ao salvar onboarding_completo direto no Supabase: $e');
+      }
+      
+      try {
+        final url = Uri.parse('http://localhost:8000/api/usuarios/${updatedColab.id}/onboarding');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'onboarding_completo': true}),
+        ).timeout(const Duration(seconds: 4));
+        print('Onboarding enviado para o backend FastAPI: ${response.statusCode}');
+      } catch (e) {
+        print('Erro ao enviar onboarding para o backend FastAPI: $e');
+      }
     }
   }
 

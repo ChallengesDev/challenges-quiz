@@ -473,7 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Coleção de Insígnias', style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 14)),
+                            const Text('Coleção de Conquistas', style: TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 14)),
                             const SizedBox(height: 4),
                             Text(
                               '$unlockedAchievements de $totalAchievements completadas',

@@ -52,7 +52,7 @@ class NotificationsProvider extends ChangeNotifier {
             'notificacoes': {
               'id': 'mock-n-3',
               'titulo': 'Parabéns pelo Nível 3! ⚡',
-              'mensagem': 'Você subiu de nível! Continue assim para acumular mais insígnias.',
+              'mensagem': 'Você subiu de nível! Continue assim para acumular mais conquistas.',
               'tipo': 'conquista',
               'agendado_para': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
             }

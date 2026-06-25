@@ -145,7 +145,9 @@ create table public.pontuacoes (
     xp_total integer not null default 0,
     nivel integer not null default 1,
     streak_atual integer not null default 0,
-    streak_maximo integer not null default 0
+    streak_maximo integer not null default 0,
+    desafio_relampago_disponivel boolean not null default true,
+    desafio_relampago_completado_em timestamptz
 );
 
 -- ==========================================
@@ -670,3 +672,50 @@ $$ language plpgsql security definer;
 create trigger tr_auto_notif_level_up
   after update of nivel on public.pontuacoes
   for each row execute procedure public.handle_auto_notif_level_up();
+
+-- ==========================================
+-- 19. TABELA treina_mais_conteudo
+-- ==========================================
+create table public.treina_mais_conteudo (
+    id uuid default gen_random_uuid() primary key,
+    empresa_id uuid not null references public.empresas(id) on delete cascade,
+    tipo text not null check (tipo in ('dica', 'pergunta')),
+    categoria_id uuid references public.categorias(id) on delete set null,
+    texto_dica text,
+    pergunta text,
+    alternativas jsonb, -- array de strings, ex: ["Alternativa 1", "Alternativa 2"]
+    resposta_correta text, -- String exata da resposta correta
+    explicacao text,
+    criado_por text not null check (criado_por in ('gestor', 'ia')),
+    ativo boolean not null default true,
+    criado_em timestamptz not null default now()
+);
+
+-- ==========================================
+-- 20. TABELA usuario_treina_mais_visto
+-- ==========================================
+create table public.usuario_treina_mais_visto (
+    id uuid default gen_random_uuid() primary key,
+    usuario_id uuid not null references public.usuarios(id) on delete cascade,
+    conteudo_id uuid not null references public.treina_mais_conteudo(id) on delete cascade,
+    visto_em timestamptz not null default now(),
+    unique (usuario_id, conteudo_id)
+);
+
+-- Habilitar RLS nas novas tabelas
+alter table public.treina_mais_conteudo enable row level security;
+alter table public.usuario_treina_mais_visto enable row level security;
+
+-- Políticas para treina_mais_conteudo
+create policy "Usuários podem visualizar conteúdo do Treina+ da mesma empresa"
+    on public.treina_mais_conteudo for select
+    using (empresa_id = public.get_user_empresa_id());
+
+create policy "Admins e Gestores podem gerenciar conteúdo do Treina+ da mesma empresa"
+    on public.treina_mais_conteudo for all
+    using (empresa_id = public.get_user_empresa_id() and public.get_user_nivel_permissao() in ('gestor', 'admin'));
+
+-- Políticas para usuario_treina_mais_visto
+create policy "Usuários podem gerenciar seu próprio histórico de conteúdo visto"
+    on public.usuario_treina_mais_visto for all
+    using (usuario_id = auth.uid());

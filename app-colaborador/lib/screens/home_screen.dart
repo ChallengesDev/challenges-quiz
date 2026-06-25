@@ -16,6 +16,7 @@ import 'trail_screen.dart';
 import 'ranking_screen.dart';
 import 'achievements_screen.dart';
 import 'profile_screen.dart';
+import 'treina_mais_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -59,6 +60,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         profileProvider.loadProfileData(
           authProvider.colaborador!.id,
           authProvider.colaborador!.empresaId ?? 'mock-company-123',
+          authProvider.isMock
+        );
+        profileProvider.fetchLightningChallengeStatus(
+          authProvider.colaborador!.id,
           authProvider.isMock
         );
 
@@ -121,6 +126,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return;
     }
 
+    // 2.5. Explanatory Onboarding Tour check
+    if (authProvider.colaborador != null && !authProvider.colaborador!.onboardingCompleto) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showExplanatoryOnboardingTour(authProvider);
+      });
+      return;
+    }
+
     // 3. Alert check for 20:00 (8 PM)
     final now = DateTime.now();
     if (now.hour >= 20 && !profileProvider.playedToday && !_alertShownToday) {
@@ -163,6 +176,186 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _confettiController.play();
       profileProvider.consumeConfetti();
     }
+  }
+
+  void _showExplanatoryOnboardingTour(AuthProvider authProvider) {
+    int currentPage = 0;
+    final List<Map<String, dynamic>> tourPages = [
+      {
+        'title': 'Esta é sua Trilha de Conhecimento',
+        'description': 'Aqui você avança no seu aprendizado, navegando por trilhas estruturadas e divididas por categorias.',
+        'icon': Icons.map_rounded,
+        'iconColor': const Color(0xff6B5FD3),
+      },
+      {
+        'title': 'Ganhe XP e suba de nível',
+        'description': 'A cada quiz respondido corretamente você acumula pontos de XP e evolui seu nível na plataforma.',
+        'icon': Icons.stars_rounded,
+        'iconColor': const Color(0xff3B7DD8),
+      },
+      {
+        'title': 'Sua sequência (streak)',
+        'description': 'Mantenha a chama acesa! Responda pelo menos um quiz por dia para não perder sua sequência de dias consecutivos.',
+        'icon': Icons.local_fire_department_rounded,
+        'iconColor': Colors.amber,
+      },
+      {
+        'title': 'Desafio Relâmpago',
+        'description': 'Um desafio rápido focado em reforçar os pontos fracos que você errou recentemente. Responda antes que o tempo acabe!',
+        'icon': Icons.bolt_rounded,
+        'iconColor': const Color(0xff6B5FD3),
+      },
+      {
+        'title': 'Treina+',
+        'description': 'Aproveite nosso feed dinâmico e contínuo com dicas curtas, curiosidades rápidas e mini-perguntas interativas.',
+        'icon': Icons.play_circle_fill_rounded,
+        'iconColor': const Color(0xff3B7DD8),
+      },
+    ];
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final page = tourPages[currentPage];
+            final isLastPage = currentPage == tourPages.length - 1;
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: List.generate(tourPages.length, (index) {
+                            final isActive = index == currentPage;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              height: 6,
+                              width: isActive ? 18 : 6,
+                              decoration: BoxDecoration(
+                                color: isActive ? const Color(0xff6B5FD3) : const Color(0xffE5E5E5),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            );
+                          }),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            authProvider.completeOnboardingTour();
+                            Navigator.pop(context);
+                          },
+                          child: const Text(
+                            'Pular',
+                            style: TextStyle(
+                              color: Color(0xff6B6B76),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      transitionBuilder: (Widget child, Animation<double> animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(scale: animation, child: child),
+                        );
+                      },
+                      child: Column(
+                        key: ValueKey<int>(currentPage),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            height: 110,
+                            width: 110,
+                            decoration: BoxDecoration(
+                              color: (page['iconColor'] as Color).withOpacity(0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              page['icon'] as IconData,
+                              size: 56,
+                              color: page['iconColor'] as Color,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            page['title'] as String,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xff2D2D3A),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Outfit',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            page['description'] as String,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xff6B6B76),
+                              fontSize: 13,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff6B5FD3),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        if (isLastPage) {
+                          authProvider.completeOnboardingTour();
+                          Navigator.pop(context);
+                        } else {
+                          setDialogState(() {
+                            currentPage++;
+                          });
+                        }
+                      },
+                      child: Text(
+                        isLastPage ? 'Começar agora' : 'Próximo',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showMascotColorSelectionDialog(AuthProvider authProvider) {
@@ -496,6 +689,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final List<Widget> tabs = [
       _buildDashboardTab(colab, score, profileProvider),
       TrailScreen(colabId: colab.id, isMock: authProvider.isMock),
+      TreinaMaisScreen(colabId: colab.id, isMock: authProvider.isMock),
       RankingScreen(colabId: colab.id),
       const AchievementsScreen(),
       ProfileScreen(colab: colab, score: score, isMock: authProvider.isMock),
@@ -559,7 +753,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       body: SafeArea(
         child: Stack(
           children: [
-            tabs[_currentTabIndex],
+            IndexedStack(
+              index: _currentTabIndex,
+              children: tabs,
+            ),
             // Confetti effect overlay
             Align(
               alignment: Alignment.topCenter,
@@ -610,6 +807,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               label: 'Trilha',
             ),
             BottomNavigationBarItem(
+              icon: Icon(Icons.play_circle_outline_rounded),
+              activeIcon: Icon(Icons.play_circle_fill_rounded),
+              label: 'Treina+',
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.emoji_events_outlined),
               activeIcon: Icon(Icons.emoji_events),
               label: 'Rankings',
@@ -617,7 +819,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             BottomNavigationBarItem(
               icon: Icon(Icons.stars_outlined),
               activeIcon: Icon(Icons.stars),
-              label: 'Insígnias',
+              label: 'Conquistas',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
@@ -689,6 +891,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildDashboardTab(Colaborador colab, Pontuacao? score, ProfileProvider profileProvider) {
+    final authProvider = Provider.of<AuthProvider>(context);
     int currentXp = score?.xpTotal ?? 0;
     int currentLevel = score?.nivel ?? 1;
     int xpNeededForNext = 500;
@@ -919,83 +1122,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
           const SizedBox(height: 24),
 
-          // e) Card "Missão Diária"
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.star_rounded, color: Colors.amber, size: 22),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Missão: ${profileProvider.activeMission.titulo}',
-                          style: const TextStyle(color: Color(0xff2D2D3A), fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                    profileProvider.dailyMissionCompleted
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xffE6F4EA),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.check_circle, color: Color(0xff137333), size: 12),
-                                SizedBox(width: 4),
-                                Text('Concluída!', style: TextStyle(color: Color(0xff137333), fontSize: 10, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          )
-                        : Text(
-                            'Expira em: $_timeUntilMidnight',
-                            style: const TextStyle(color: Color(0xff3B7DD8), fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'monospace'),
-                          ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  profileProvider.activeMission.descricao,
-                  style: const TextStyle(color: Color(0xff6B6B76), fontSize: 12, height: 1.4),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xffFAF9F6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.bolt, color: Color(0xff6B5FD3), size: 16),
-                      SizedBox(width: 6),
-                      Text(
-                        'Recompensa: +100 XP extras',
-                        style: TextStyle(color: Color(0xff2D2D3A), fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // e) Card "Desafio Relâmpago"
+          _buildLightningChallengeCard(context, profileProvider, authProvider),
 
           const SizedBox(height: 24),
 
@@ -1079,5 +1207,218 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  Widget _buildLightningChallengeCard(
+    BuildContext context,
+    ProfileProvider profileProvider,
+    AuthProvider authProvider,
+  ) {
+    final status = profileProvider.lightningChallengeStatus;
+    final isBlocked = status == 'bloqueado';
+    final isCompleted = status == 'completado';
+
+    List<BoxShadow> shadows = [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.04),
+        blurRadius: 10,
+        offset: const Offset(0, 4),
+      )
+    ];
+
+    if (status == 'disponivel') {
+      shadows.add(
+        BoxShadow(
+          color: const Color(0xff6B5FD3).withOpacity(0.15),
+          blurRadius: 12,
+          spreadRadius: 2,
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: status == 'disponivel' ? const Color(0xff6B5FD3).withOpacity(0.3) : Colors.transparent,
+          width: 1.5,
+        ),
+        boxShadow: shadows,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: isBlocked
+              ? null
+              : () {
+                  Navigator.pushNamed(
+                    context,
+                    '/lightning_challenge',
+                    arguments: {
+                      'isReview': isCompleted,
+                    },
+                  );
+                },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isBlocked ? Icons.lock_outline_rounded : Icons.bolt_rounded,
+                          color: isBlocked ? const Color(0xff6B6B76) : const Color(0xff6B5FD3),
+                          size: 22,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Desafio Relâmpago',
+                          style: TextStyle(
+                            color: Color(0xff2D2D3A),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    _buildChallengeStatusBadge(status),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  isBlocked
+                      ? 'Complete pelo menos 1 quiz normal da Trilha hoje para liberar esta atividade especial!'
+                      : isCompleted
+                          ? 'Desafio concluído hoje! Você pode jogar novamente para revisar seus pontos fracos a qualquer momento.'
+                          : 'Sessão rápida de 4 perguntas focadas em seus erros recentes, com tempo limite de 8 segundos! Ganhe 2x XP.',
+                  style: TextStyle(
+                    color: isBlocked ? const Color(0xff9E9E9E) : const Color(0xff6B6B76),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xffFAF9F6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.bolt,
+                            color: isBlocked ? const Color(0xff6B6B76) : const Color(0xff6B5FD3),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            isBlocked
+                                ? 'Recompensa: 2x XP + Bônus'
+                                : 'Recompensa: 2x XP + Bônus 50 XP',
+                            style: TextStyle(
+                              color: isBlocked ? const Color(0xff6B6B76) : const Color(0xff2D2D3A),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!isBlocked)
+                      Row(
+                        children: [
+                          Text(
+                            isCompleted ? 'Rever' : 'Começar',
+                            style: const TextStyle(
+                              color: Color(0xff6B5FD3),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Color(0xff6B5FD3),
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChallengeStatusBadge(String status) {
+    if (status == 'bloqueado') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xffF5F5F5),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'Bloqueado',
+          style: TextStyle(
+            color: Color(0xff6B6B76),
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    } else if (status == 'completado') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xffE6F4EA),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Color(0xff137333), size: 12),
+            SizedBox(width: 4),
+            Text(
+              'Concluído ✓',
+              style: TextStyle(
+                color: Color(0xff137333),
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xffE8EAF6),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'Liberado!',
+          style: TextStyle(
+            color: Color(0xff6B5FD3),
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
   }
 }

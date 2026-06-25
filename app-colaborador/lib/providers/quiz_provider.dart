@@ -317,6 +317,7 @@ class QuizProvider extends ChangeNotifier {
         // In mock mode, we award score to profile provider
         await profileProvider.addXp(_score, isMock);
       }
+      await profileProvider.fetchLightningChallengeStatus(colabId, isMock);
     } catch (e) {
       print('Erro ao salvar finalização no banco: $e');
     }

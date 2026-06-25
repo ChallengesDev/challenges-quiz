@@ -44,13 +44,48 @@ interface Challenge {
   topicos?: { nome: string }; // Join helper
 }
 
+interface TreinaMaisConteudo {
+  id: string;
+  empresa_id: string;
+  tipo: 'dica' | 'pergunta';
+  categoria_id?: string;
+  texto_dica?: string;
+  pergunta?: string;
+  alternativas?: string[];
+  resposta_correta?: string;
+  explicacao?: string;
+  criado_por: 'gestor' | 'ia';
+  ativo: boolean;
+  categoria_nome?: string;
+  categorias?: { nome: string };
+}
+
 export const ContentManagement: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'folders' | 'quizzes' | 'campaigns'>('folders');
+  const [activeTab, setActiveTab] = useState<'folders' | 'quizzes' | 'campaigns' | 'treina-mais'>('folders');
   const [categories, setCategories] = useState<Category[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // Treina+ States
+  const [treinaMaisList, setTreinaMaisList] = useState<TreinaMaisConteudo[]>([]);
+  const [newTreinaMais, setNewTreinaMais] = useState({
+    tipo: 'dica' as 'dica' | 'pergunta',
+    categoria_id: '',
+    texto_dica: '',
+    pergunta: '',
+    alternativas: ['', '', '', ''],
+    resposta_correta: '',
+    explicacao: ''
+  });
+  const [showTreinaMaisAIModal, setShowTreinaMaisAIModal] = useState(false);
+  const [treinaMaisAIForm, setTreinaMaisAIForm] = useState({
+    tema: '',
+    quantidade: 10,
+    contexto: ''
+  });
+  const [generatedTreinaMais, setGeneratedTreinaMais] = useState<any[]>([]);
   
   // Excel Import States
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -98,6 +133,7 @@ export const ContentManagement: React.FC = () => {
     descricao: ''
   });
 
+
   // Fetch from DB
   const loadContentData = async () => {
     try {
@@ -114,6 +150,17 @@ export const ContentManagement: React.FC = () => {
       // 3. Load Challenges
       const { data: chalData } = await supabase.from('desafios').select('*, topicos(nome)');
       if (chalData) setChallenges(chalData as any);
+
+      // 4. Load Treina+ Content
+      const { data: treinaData } = await supabase.from('treina_mais_conteudo').select('*, categorias(nome)');
+      if (treinaData) {
+        setTreinaMaisList(treinaData.map((item: any) => ({
+          ...item,
+          categoria_nome: item.categorias?.nome
+        })) as any);
+      } else {
+        setTreinaMaisList([]);
+      }
 
       // Set fallback if empty
       if ((!catData || catData.length === 0)) {
@@ -133,8 +180,39 @@ export const ContentManagement: React.FC = () => {
           { id: 'chal-1', topico_id: 'top-1', titulo: 'LGPD na Prática', dificuldade: 'medio', tempo_limite: 600, pontuacao: 150, ativo: true },
           { id: 'chal-2', topico_id: 'top-3', titulo: 'Desafio Anti-Phishing', dificuldade: 'dificil', tempo_limite: 400, pontuacao: 200, ativo: true }
         ]);
-      }
 
+        setTreinaMaisList([
+          {
+            id: 'tm-1',
+            empresa_id: 'mock-empresa-id',
+            tipo: 'dica',
+            categoria_id: 'cat-1',
+            texto_dica: 'O Encarregado pelo Tratamento de Dados Pessoais (DPO) é a pessoa indicada pelo controlador e operador para atuar como canal de comunicação entre o controlador, os titulares dos dados e a ANPD.',
+            explicacao: 'O papel do DPO está previsto no artigo 41 da LGPD.',
+            criado_por: 'gestor',
+            ativo: true,
+            categoria_nome: 'Compliance & LGPD'
+          },
+          {
+            id: 'tm-2',
+            empresa_id: 'mock-empresa-id',
+            tipo: 'pergunta',
+            categoria_id: 'cat-2',
+            pergunta: 'Qual destas é a recomendação ideal sobre o uso de senhas corporativas?',
+            alternativas: [
+              'Compartilhar com colegas do mesmo time.',
+              'Anotar em um post-it sob o teclado.',
+              'Criar uma frase longa (passphrase) com números e caracteres especiais.',
+              'Usar a mesma senha do seu e-mail pessoal.'
+            ],
+            resposta_correta: 'Criar uma frase longa (passphrase) com números e caracteres especiais.',
+            explicacao: 'Uma passphrase longa é muito mais resistente a ataques de força bruta.',
+            criado_por: 'ia',
+            ativo: true,
+            categoria_nome: 'Segurança da Informação'
+          }
+        ]);
+      }
     } catch (err) {
       console.error('Erro ao buscar dados de conteúdo:', err);
     } finally {
@@ -611,6 +689,229 @@ export const ContentManagement: React.FC = () => {
     });
   };
 
+  const handleCreateTreinaMais = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { data: profile } = await supabase.from('usuarios').select('empresa_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const empresaId = profile?.empresa_id || 'mock-empresa-id';
+
+      const alts = newTreinaMais.tipo === 'pergunta' 
+        ? newTreinaMais.alternativas.filter(a => a.trim() !== '') 
+        : undefined;
+
+      if (newTreinaMais.tipo === 'pergunta' && (!alts || alts.length < 2)) {
+        setMessage({ type: 'error', text: 'Uma pergunta precisa de pelo menos 2 alternativas preenchidas.' });
+        return;
+      }
+
+      if (newTreinaMais.tipo === 'pergunta' && !newTreinaMais.resposta_correta) {
+        setMessage({ type: 'error', text: 'Selecione a resposta correta para a pergunta.' });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('treina_mais_conteudo')
+        .insert({
+          empresa_id: empresaId,
+          tipo: newTreinaMais.tipo,
+          categoria_id: newTreinaMais.categoria_id || null,
+          texto_dica: newTreinaMais.tipo === 'dica' ? newTreinaMais.texto_dica : null,
+          pergunta: newTreinaMais.tipo === 'pergunta' ? newTreinaMais.pergunta : null,
+          alternativas: alts,
+          resposta_correta: newTreinaMais.tipo === 'pergunta' ? newTreinaMais.resposta_correta : null,
+          explicacao: newTreinaMais.explicacao || null,
+          criado_por: 'gestor',
+          ativo: true
+        })
+        .select();
+
+      if (error) throw error;
+
+      if (data) {
+        const catName = categories.find(c => c.id === newTreinaMais.categoria_id)?.nome;
+        const newItem: TreinaMaisConteudo = {
+          ...data[0],
+          categoria_nome: catName
+        };
+        setTreinaMaisList([newItem, ...treinaMaisList]);
+      }
+
+      setNewTreinaMais({
+        tipo: 'dica',
+        categoria_id: '',
+        texto_dica: '',
+        pergunta: '',
+        alternativas: ['', '', '', ''],
+        resposta_correta: '',
+        explicacao: ''
+      });
+      setMessage({ type: 'success', text: 'Item adicionado ao Treina+ com sucesso!' });
+    } catch (err: any) {
+      console.error(err);
+      const mockItem: TreinaMaisConteudo = {
+        id: `tm-${Date.now()}`,
+        empresa_id: 'mock-empresa-id',
+        tipo: newTreinaMais.tipo,
+        categoria_id: newTreinaMais.categoria_id,
+        categoria_nome: categories.find(c => c.id === newTreinaMais.categoria_id)?.nome || 'Compliance & LGPD',
+        texto_dica: newTreinaMais.tipo === 'dica' ? newTreinaMais.texto_dica : undefined,
+        pergunta: newTreinaMais.tipo === 'pergunta' ? newTreinaMais.pergunta : undefined,
+        alternativas: newTreinaMais.tipo === 'pergunta' ? newTreinaMais.alternativas.filter(a => a.trim() !== '') : undefined,
+        resposta_correta: newTreinaMais.tipo === 'pergunta' ? newTreinaMais.resposta_correta : undefined,
+        explicacao: newTreinaMais.explicacao,
+        criado_por: 'gestor',
+        ativo: true
+      };
+      setTreinaMaisList([mockItem, ...treinaMaisList]);
+      setNewTreinaMais({
+        tipo: 'dica',
+        categoria_id: '',
+        texto_dica: '',
+        pergunta: '',
+        alternativas: ['', '', '', ''],
+        resposta_correta: '',
+        explicacao: ''
+      });
+      setMessage({ type: 'success', text: '[Modo de Teste] Item adicionado localmente ao feed.' });
+    }
+  };
+
+  const handleToggleTreinaMaisActive = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('treina_mais_conteudo')
+        .update({ ativo: !currentStatus })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      setTreinaMaisList(treinaMaisList.map(item => 
+        item.id === id ? { ...item, ativo: !currentStatus } : item
+      ));
+      setMessage({ type: 'success', text: 'Status atualizado com sucesso!' });
+    } catch (err) {
+      console.error(err);
+      setTreinaMaisList(treinaMaisList.map(item => 
+        item.id === id ? { ...item, ativo: !currentStatus } : item
+      ));
+      setMessage({ type: 'success', text: '[Modo de Teste] Status atualizado localmente.' });
+    }
+  };
+
+  const handleDeleteTreinaMais = async (id: string) => {
+    if (!window.confirm('Deseja realmente excluir este conteúdo do Treina+?')) return;
+    try {
+      const { error } = await supabase
+        .from('treina_mais_conteudo')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      setTreinaMaisList(treinaMaisList.filter(item => item.id !== id));
+      setMessage({ type: 'success', text: 'Conteúdo excluído com sucesso!' });
+    } catch (err) {
+      console.error(err);
+      setTreinaMaisList(treinaMaisList.filter(item => item.id !== id));
+      setMessage({ type: 'success', text: '[Modo de Teste] Conteúdo removido localmente.' });
+    }
+  };
+
+  const handleGenerateTreinaMaisWithAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!treinaMaisAIForm.tema || treinaMaisAIForm.quantidade <= 0) return;
+
+    setAIStage('form');
+    setAIGenerating(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/treina-mais/gerar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tema: treinaMaisAIForm.tema,
+          quantidade: treinaMaisAIForm.quantidade,
+          contexto: treinaMaisAIForm.contexto || null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao gerar conteúdo Treina+ com IA.');
+      }
+
+      const data = await response.json();
+      const mapped = data.map((item: any) => ({
+        tipo: item.tipo === 'pergunta' ? 'pergunta' : 'dica',
+        texto_dica: item.texto_dica || '',
+        pergunta: item.pergunta || '',
+        alternativas: item.alternativas || ['', '', '', ''],
+        resposta_correta: item.resposta_correta || '',
+        explicacao: item.explicacao || '',
+        categoria_id: '',
+        criado_por: 'ia'
+      }));
+
+      setGeneratedTreinaMais(mapped);
+      setAIStage('review');
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ type: 'error', text: `Erro na geração Treina+ por IA: ${err.message || 'Verifique se a API está online.'}` });
+    } finally {
+      setAIGenerating(false);
+    }
+  };
+
+  const handleSaveAllTreinaMaisAI = async () => {
+    if (generatedTreinaMais.length === 0) return;
+
+    setAIGenerating(true);
+
+    try {
+      const { data: profile } = await supabase.from('usuarios').select('empresa_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const empresaId = profile?.empresa_id || 'mock-empresa-id';
+      const commonCategoryId = (document.getElementById('ai-bulk-category-select') as HTMLSelectElement)?.value || '';
+
+      const itemsToSend = generatedTreinaMais.map(item => ({
+        tipo: item.tipo,
+        texto_dica: item.tipo === 'dica' ? item.texto_dica : null,
+        pergunta: item.tipo === 'pergunta' ? item.pergunta : null,
+        alternativas: item.tipo === 'pergunta' ? item.alternativas.filter((a: string) => a.trim() !== '') : null,
+        resposta_correta: item.tipo === 'pergunta' ? item.resposta_correta : null,
+        explicacao: item.explicacao || null,
+        categoria_id: commonCategoryId || null,
+        criado_por: 'ia'
+      }));
+
+      const response = await fetch(`${API_URL}/api/treina-mais/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          itens: itemsToSend
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao salvar itens do Treina+ gerados.');
+      }
+
+      const resData = await response.json();
+      
+      loadContentData();
+      setShowTreinaMaisAIModal(false);
+      setMessage({
+        type: 'success',
+        text: `Sucesso! Foram gerados e salvos ${resData.inserted} cartões no feed do Treina+.`
+      });
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ type: 'error', text: `Erro ao salvar itens do Treina+: ${err.message}` });
+    } finally {
+      setAIGenerating(false);
+    }
+  };
+
+
   return (
     <div className="page-container animate-fade-in">
       {/* Title */}
@@ -696,6 +997,21 @@ export const ContentManagement: React.FC = () => {
           }}
         >
           Agendar Missões
+        </button>
+        <button
+          onClick={() => setActiveTab('treina-mais')}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '12px 4px',
+            color: activeTab === 'treina-mais' ? 'var(--color-primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'treina-mais' ? '2px solid var(--color-primary)' : '2px solid transparent',
+            fontWeight: activeTab === 'treina-mais' ? 600 : 500,
+            fontSize: '14px',
+            cursor: 'pointer'
+          }}
+        >
+          Treina+ (Reels)
         </button>
       </div>
 
@@ -1266,6 +1582,603 @@ export const ContentManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {activeTab === 'treina-mais' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
+          {/* List and Curatorial */}
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 600, color: 'var(--text-white)' }}>
+                  Feed do Treina+ (Reels do Conhecimento)
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Gerencie as pílulas de conteúdo e perguntas rápidas exibidas aos colaboradores.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setAIStage('form');
+                  setTreinaMaisAIForm({ tema: '', quantidade: 10, contexto: '' });
+                  setGeneratedTreinaMais([]);
+                  setShowTreinaMaisAIModal(true);
+                }}
+                className="btn btn-primary"
+                style={{ 
+                  padding: '8px 16px', 
+                  fontSize: '13px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+                type="button"
+              >
+                <Sparkles size={16} />
+                <span>Gerar Lote com IA</span>
+              </button>
+            </div>
+
+            {loading ? (
+              <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '24px' }}>Carregando conteúdo...</div>
+            ) : (
+              <div className="table-container" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '10%' }}>Tipo</th>
+                      <th style={{ width: '20%' }}>Categoria</th>
+                      <th style={{ width: '45%' }}>Conteúdo</th>
+                      <th style={{ width: '10%' }}>Criado por</th>
+                      <th style={{ width: '15%' }}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {treinaMaisList.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <span 
+                            className={`badge ${item.tipo === 'dica' ? 'badge-success' : 'badge-info'}`}
+                            style={{ 
+                              backgroundColor: item.tipo === 'dica' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                              color: item.tipo === 'dica' ? '#10b981' : '#3b82f6',
+                              textTransform: 'uppercase',
+                              fontWeight: 600
+                            }}
+                          >
+                            {item.tipo}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="badge badge-info" style={{ textTransform: 'none' }}>
+                            {item.categoria_nome || 'Geral'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ 
+                            maxWidth: '300px', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap',
+                            color: 'var(--text-white)',
+                            fontSize: '13px'
+                          }} title={item.tipo === 'dica' ? item.texto_dica : item.pergunta}>
+                            {item.tipo === 'dica' ? item.texto_dica : item.pergunta}
+                          </div>
+                          {item.explicacao && (
+                            <div style={{ 
+                              fontSize: '11px', 
+                              color: 'var(--text-muted)', 
+                              marginTop: '2px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '300px'
+                            }} title={`Justificativa: ${item.explicacao}`}>
+                              <span style={{ fontWeight: 600 }}>Justificativa:</span> {item.explicacao}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '12px', opacity: 0.8 }}>
+                            {item.criado_por === 'ia' ? '✨ IA' : '👤 Gestor'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <button
+                              onClick={() => handleToggleTreinaMaisActive(item.id, item.ativo)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                color: item.ativo ? '#10b981' : 'var(--text-muted)'
+                              }}
+                              title={item.ativo ? 'Desativar item' : 'Ativar item'}
+                            >
+                              <span style={{ fontSize: '11px', fontWeight: 600 }}>
+                                {item.ativo ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTreinaMais(item.id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'rgba(239, 68, 68, 0.8)',
+                                cursor: 'pointer',
+                                padding: 0,
+                                fontSize: '11px',
+                                textDecoration: 'underline'
+                              }}
+                              title="Excluir"
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {treinaMaisList.length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
+                          Nenhum conteúdo cadastrado para o Treina+ ainda.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Create Manual */}
+          <div className="card">
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 600, color: 'var(--text-white)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <PlusCircle size={18} color="var(--color-primary)" />
+              <span>Adicionar Manualmente</span>
+            </h3>
+
+            <form onSubmit={handleCreateTreinaMais} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Tipo de Conteúdo</label>
+                <select
+                  value={newTreinaMais.tipo}
+                  onChange={(e) => setNewTreinaMais({ 
+                    ...newTreinaMais, 
+                    tipo: e.target.value as 'dica' | 'pergunta',
+                    resposta_correta: '' 
+                  })}
+                  required
+                >
+                  <option value="dica">💡 Dica Rápida</option>
+                  <option value="pergunta">❓ Mini-Pergunta</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Categoria Vinculada</label>
+                <select
+                  value={newTreinaMais.categoria_id}
+                  onChange={(e) => setNewTreinaMais({ ...newTreinaMais, categoria_id: e.target.value })}
+                  required
+                >
+                  <option value="">Selecione a Categoria...</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              {newTreinaMais.tipo === 'dica' ? (
+                <>
+                  <div>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Texto da Dica Rápida</label>
+                    <textarea
+                      className="input"
+                      placeholder="Escreva uma dica objetiva de até 3 frases..."
+                      value={newTreinaMais.texto_dica}
+                      onChange={(e) => setNewTreinaMais({ ...newTreinaMais, texto_dica: e.target.value })}
+                      rows={3}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Detalhe Extra / Explicação (Opcional)</label>
+                    <textarea
+                      className="input"
+                      placeholder="Uma justificativa ou detalhe extra curto de 1 frase..."
+                      value={newTreinaMais.explicacao}
+                      onChange={(e) => setNewTreinaMais({ ...newTreinaMais, explicacao: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Enunciado da Pergunta</label>
+                    <textarea
+                      className="input"
+                      placeholder="Qual o principal objetivo..."
+                      value={newTreinaMais.pergunta}
+                      onChange={(e) => setNewTreinaMais({ ...newTreinaMais, pergunta: e.target.value })}
+                      rows={2}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Alternativas (Mínimo 2)</label>
+                    {newTreinaMais.alternativas.map((alt, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-primary)' }}>
+                          {String.fromCharCode(65 + idx)})
+                        </span>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder={`Alternativa ${idx + 1}`}
+                          value={alt}
+                          onChange={(e) => {
+                            const updated = [...newTreinaMais.alternativas];
+                            updated[idx] = e.target.value;
+                            setNewTreinaMais({ ...newTreinaMais, alternativas: updated });
+                          }}
+                          required={idx < 2}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Resposta Correta</label>
+                    <select
+                      value={newTreinaMais.resposta_correta}
+                      onChange={(e) => setNewTreinaMais({ ...newTreinaMais, resposta_correta: e.target.value })}
+                      required
+                    >
+                      <option value="">Selecione a correta...</option>
+                      {newTreinaMais.alternativas
+                        .filter(a => a.trim() !== '')
+                        .map((alt, idx) => (
+                          <option key={idx} value={alt}>{alt}</option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Justificativa / Explicação (Opcional)</label>
+                    <textarea
+                      className="input"
+                      placeholder="Justificativa curta e direta de 1 frase..."
+                      value={newTreinaMais.explicacao}
+                      onChange={(e) => setNewTreinaMais({ ...newTreinaMais, explicacao: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+                </>
+              )}
+
+              <button type="submit" className="btn btn-primary" style={{ marginTop: '10px' }}>
+                Salvar no Feed
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showTreinaMaisAIModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(5, 7, 15, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div className="card animate-fade-in" style={{
+            width: '100%',
+            maxWidth: aiStage === 'review' ? '850px' : '500px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '32px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), var(--shadow-glow)',
+            border: '1px solid var(--border-color)',
+            background: '#0f1322'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 600, color: 'var(--text-white)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={20} color="var(--color-primary)" />
+                <span>{aiStage === 'review' ? 'Revisar Lote do Treina+' : 'Gerar Cartões com IA'}</span>
+              </h3>
+              <button 
+                onClick={() => setShowTreinaMaisAIModal(false)}
+                disabled={aiGenerating}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            {aiGenerating ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: '16px' }}>
+                <div className="animate-spin" style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  border: '3px solid rgba(99, 102, 241, 0.1)',
+                  borderTopColor: 'var(--color-primary)'
+                }}></div>
+                <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                  {aiStage === 'review' ? 'Salvando lote no banco de dados...' : 'Gemini AI está elaborando dicas e mini-perguntas...'}
+                </span>
+              </div>
+            ) : aiStage === 'form' ? (
+              <form onSubmit={handleGenerateTreinaMaisWithAI} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Tema/Tópico da Geração</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Ex: LGPD na Prática, Senhas Fortes, Compliance..."
+                    value={treinaMaisAIForm.tema}
+                    onChange={(e) => setTreinaMaisAIForm({ ...treinaMaisAIForm, tema: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Quantidade de Cartões</label>
+                  <select
+                    value={treinaMaisAIForm.quantidade}
+                    onChange={(e) => setTreinaMaisAIForm({ ...treinaMaisAIForm, quantidade: parseInt(e.target.value) || 10 })}
+                  >
+                    <option value={5}>5 Itens</option>
+                    <option value={10}>10 Itens</option>
+                    <option value={15}>15 Itens</option>
+                    <option value={20}>20 Itens</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Contexto Adicional (Opcional)</label>
+                  <textarea
+                    className="input"
+                    placeholder="Ex: Focar na LGPD para o time de atendimento, evite jargões muito técnicos."
+                    value={treinaMaisAIForm.contexto}
+                    onChange={(e) => setTreinaMaisAIForm({ ...treinaMaisAIForm, contexto: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setShowTreinaMaisAIModal(false)}
+                    style={{ border: '1px solid var(--border-color)' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button type="submit" className="btn btn-primary">Gerar com IA</button>
+                </div>
+              </form>
+            ) : (
+              // Review stage
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Vincular Todos a uma Categoria</label>
+                  <select id="ai-bulk-category-select" defaultValue="" style={{ width: '100%' }}>
+                    <option value="">Nenhuma Categoria (Geral)</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ 
+                  overflowY: 'auto', 
+                  flex: 1, 
+                  paddingRight: '8px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '20px',
+                  marginBottom: '24px'
+                }}>
+                  {generatedTreinaMais.map((item, idx) => (
+                    <div key={idx} style={{
+                      padding: '20px',
+                      background: 'rgba(255, 255, 255, 0.01)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-sm)',
+                      position: 'relative'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...generatedTreinaMais];
+                          updated.splice(idx, 1);
+                          setGeneratedTreinaMais(updated);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '16px',
+                          right: '16px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--status-error)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '12px'
+                        }}
+                        title="Remover"
+                      >
+                        <X size={16} />
+                        <span>Remover</span>
+                      </button>
+
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                        <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+                          Item {idx + 1}
+                        </span>
+                        <span>•</span>
+                        <select
+                          value={item.tipo}
+                          onChange={(e) => {
+                            const updated = [...generatedTreinaMais];
+                            updated[idx].tipo = e.target.value;
+                            setGeneratedTreinaMais(updated);
+                          }}
+                          style={{ border: 'none', background: 'none', padding: 0, color: 'var(--color-accent)', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer', width: 'auto' }}
+                        >
+                          <option value="dica">💡 Dica</option>
+                          <option value="pergunta">❓ Pergunta</option>
+                        </select>
+                      </div>
+
+                      {item.tipo === 'dica' ? (
+                        <>
+                          <div style={{ marginBottom: '12px' }}>
+                            <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Texto da Dica</label>
+                            <textarea
+                              className="input"
+                              value={item.texto_dica}
+                              onChange={(e) => {
+                                const updated = [...generatedTreinaMais];
+                                updated[idx].texto_dica = e.target.value;
+                                setGeneratedTreinaMais(updated);
+                              }}
+                              rows={2}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Detalhe/Explicação</label>
+                            <input
+                              type="text"
+                              className="input"
+                              value={item.explicacao}
+                              onChange={(e) => {
+                                const updated = [...generatedTreinaMais];
+                                updated[idx].explicacao = e.target.value;
+                                setGeneratedTreinaMais(updated);
+                              }}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ marginBottom: '12px' }}>
+                            <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Enunciado da Pergunta</label>
+                            <textarea
+                              className="input"
+                              value={item.pergunta}
+                              onChange={(e) => {
+                                const updated = [...generatedTreinaMais];
+                                updated[idx].pergunta = e.target.value;
+                                setGeneratedTreinaMais(updated);
+                              }}
+                              rows={2}
+                            />
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            {item.alternativas.map((alt: string, altIdx: number) => (
+                              <div key={altIdx}>
+                                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                                  Alternativa {String.fromCharCode(65 + altIdx)}
+                                </label>
+                                <input
+                                  type="text"
+                                  className="input"
+                                  value={alt}
+                                  onChange={(e) => {
+                                    const updated = [...generatedTreinaMais];
+                                    const updatedAlts = [...updated[idx].alternativas];
+                                    updatedAlts[altIdx] = e.target.value;
+                                    updated[idx].alternativas = updatedAlts;
+                                    setGeneratedTreinaMais(updated);
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Resposta Correta</label>
+                              <select
+                                value={item.resposta_correta}
+                                onChange={(e) => {
+                                  const updated = [...generatedTreinaMais];
+                                  updated[idx].resposta_correta = e.target.value;
+                                  setGeneratedTreinaMais(updated);
+                                }}
+                              >
+                                <option value="">Selecione...</option>
+                                {item.alternativas.filter((a: string) => a.trim() !== '').map((a: string, aIdx: number) => (
+                                  <option key={aIdx} value={a}>{a}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Justificativa</label>
+                              <input
+                                type="text"
+                                className="input"
+                                value={item.explicacao}
+                                onChange={(e) => {
+                                  const updated = [...generatedTreinaMais];
+                                  updated[idx].explicacao = e.target.value;
+                                  setGeneratedTreinaMais(updated);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setAIStage('form')}
+                    disabled={aiGenerating}
+                    style={{ border: '1px solid var(--border-color)' }}
+                  >
+                    Voltar
+                  </button>
+                  <button 
+                    onClick={handleSaveAllTreinaMaisAI}
+                    disabled={aiGenerating || generatedTreinaMais.length === 0}
+                    className="btn btn-primary"
+                  >
+                    Salvar Todo o Lote
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
 
       {showAIModal && (
         <div style={{

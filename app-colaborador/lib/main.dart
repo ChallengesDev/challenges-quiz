@@ -10,6 +10,7 @@ import 'screens/home_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'screens/result_screen.dart';
 import 'screens/notifications_screen.dart';
+import 'screens/lightning_challenge_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +89,7 @@ class MyApp extends StatelessWidget {
           '/quiz': (context) => const QuizScreen(),
           '/result': (context) => const ResultScreen(),
           '/notifications': (context) => const NotificationsScreen(),
+          '/lightning_challenge': (context) => const LightningChallengeScreen(),
         },
       ),
     );
