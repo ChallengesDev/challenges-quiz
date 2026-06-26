@@ -53,7 +53,7 @@ class Categoria {
   final String nome;
   final String? descricao;
   final bool ativo;
-
+cd ~/challenges-quiz && git add . && git commit -m "correções de compilação e ajustes diversos" && git push
   Categoria({
     required this.id,
     required this.nome,
