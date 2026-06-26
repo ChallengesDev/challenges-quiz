@@ -719,3 +719,113 @@ create policy "Admins e Gestores podem gerenciar conteúdo do Treina+ da mesma e
 create policy "Usuários podem gerenciar seu próprio histórico de conteúdo visto"
     on public.usuario_treina_mais_visto for all
     using (usuario_id = auth.uid());
+
+-- ==========================================
+-- 21. TABELAS DO MODO SALA (LIVE MULTIPLAYER)
+-- ==========================================
+
+create table public.salas_live (
+    id uuid default gen_random_uuid() primary key,
+    codigo varchar(6) not null unique,
+    empresa_id uuid not null references public.empresas(id) on delete cascade,
+    criado_por_usuario_id uuid not null references public.usuarios(id) on delete cascade,
+    tipo text not null check (tipo in ('gestor', 'colaborador')),
+    origem_perguntas text not null check (origem_perguntas in ('trilha', 'banco_geral', 'personalizada')),
+    categoria_id uuid references public.categorias(id) on delete set null,
+    status text not null default 'aguardando' check (status in ('aguardando', 'em_andamento', 'finalizada')),
+    pergunta_atual_index integer not null default 0,
+    criado_em timestamptz not null default now(),
+    iniciado_em timestamptz,
+    finalizado_em timestamptz
+);
+
+create table public.salas_live_perguntas (
+    id uuid default gen_random_uuid() primary key,
+    sala_id uuid not null references public.salas_live(id) on delete cascade,
+    pergunta_texto text not null,
+    alternativa_a text not null,
+    alternativa_b text not null,
+    alternativa_c text not null,
+    alternativa_d text not null,
+    resposta_correta char(1) not null check (resposta_correta in ('A', 'B', 'C', 'D')),
+    ordem integer not null,
+    tempo_limite_segundos integer not null default 30
+);
+
+create table public.salas_live_participantes (
+    id uuid default gen_random_uuid() primary key,
+    sala_id uuid not null references public.salas_live(id) on delete cascade,
+    usuario_id uuid not null references public.usuarios(id) on delete cascade,
+    entrou_em timestamptz not null default now(),
+    pontuacao_total integer not null default 0,
+    posicao_final integer,
+    unique(sala_id, usuario_id)
+);
+
+create table public.salas_live_respostas (
+    id uuid default gen_random_uuid() primary key,
+    sala_id uuid not null references public.salas_live(id) on delete cascade,
+    participante_id uuid not null references public.salas_live_participantes(id) on delete cascade,
+    pergunta_id uuid not null references public.salas_live_perguntas(id) on delete cascade,
+    alternativa_escolhida char(1) not null check (alternativa_escolhida in ('A', 'B', 'C', 'D')),
+    correta boolean not null,
+    tempo_resposta_ms integer not null,
+    pontos_ganhos integer not null default 0,
+    unique(participante_id, pergunta_id)
+);
+
+-- Habilitar RLS nas novas tabelas
+alter table public.salas_live enable row level security;
+alter table public.salas_live_perguntas enable row level security;
+alter table public.salas_live_participantes enable row level security;
+alter table public.salas_live_respostas enable row level security;
+
+-- Políticas para salas_live
+create policy "Qualquer usuário autenticado pode ver salas"
+    on public.salas_live for select
+    using (auth.role() = 'authenticated');
+
+create policy "Qualquer usuário autenticado pode criar salas"
+    on public.salas_live for insert
+    with check (auth.role() = 'authenticated');
+
+create policy "Qualquer usuário autenticado pode atualizar salas"
+    on public.salas_live for update
+    using (auth.role() = 'authenticated');
+
+-- Políticas para salas_live_perguntas
+create policy "Qualquer usuário autenticado pode ver perguntas de salas"
+    on public.salas_live_perguntas for select
+    using (auth.role() = 'authenticated');
+
+create policy "Qualquer usuário autenticado pode gerenciar perguntas de salas"
+    on public.salas_live_perguntas for all
+    using (auth.role() = 'authenticated');
+
+-- Políticas para salas_live_participantes
+create policy "Qualquer usuário autenticado pode ver participantes de salas"
+    on public.salas_live_participantes for select
+    using (auth.role() = 'authenticated');
+
+create policy "Qualquer usuário autenticado pode se juntar a salas"
+    on public.salas_live_participantes for insert
+    with check (auth.role() = 'authenticated');
+
+create policy "Qualquer usuário autenticado pode atualizar participante"
+    on public.salas_live_participantes for update
+    using (auth.role() = 'authenticated');
+
+-- Políticas para salas_live_respostas
+create policy "Qualquer usuário autenticado pode ver respostas de salas"
+    on public.salas_live_respostas for select
+    using (auth.role() = 'authenticated');
+
+create policy "Qualquer usuário autenticado pode enviar respostas para salas"
+    on public.salas_live_respostas for insert
+    with check (auth.role() = 'authenticated');
+
+-- Habilitar Realtime
+alter publication supabase_realtime add table public.salas_live;
+alter publication supabase_realtime add table public.salas_live_participantes;
+alter publication supabase_realtime add table public.salas_live_perguntas;
+alter publication supabase_realtime add table public.salas_live_respostas;

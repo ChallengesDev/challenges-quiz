@@ -13,6 +13,7 @@ import { Analytics } from './pages/Analytics';
 import { GamificationSettings } from './pages/GamificationSettings';
 import { Reports } from './pages/Reports';
 import { Notifications } from './pages/Notifications';
+import { ModoSalaGestor } from './pages/ModoSalaGestor';
 
 const LayoutWrapper: React.FC<{ children: React.ReactNode; companyName: string; userName: string; userEmail: string }> = ({
   children,
@@ -37,6 +38,8 @@ const LayoutWrapper: React.FC<{ children: React.ReactNode; companyName: string; 
         return 'Configurações de Gamificação';
       case '/notificacoes':
         return 'Notificações da Empresa';
+      case '/modo-sala':
+        return 'Modo Sala ao Vivo (Multiplayer)';
       case '/relatorios':
         return 'Relatórios e Auditoria';
       default:
@@ -244,6 +247,19 @@ export default function App() {
             session ? (
               <LayoutWrapper companyName={companyName} userName={userName} userEmail={userEmail}>
                 <Reports />
+              </LayoutWrapper>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/modo-sala"
+          element={
+            session ? (
+              <LayoutWrapper companyName={companyName} userName={userName} userEmail={userEmail}>
+                <ModoSalaGestor />
               </LayoutWrapper>
             ) : (
               <Navigate to="/login" replace />

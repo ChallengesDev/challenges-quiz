@@ -9,7 +9,8 @@ import {
   Download, 
   LogOut,
   Trophy,
-  Bell
+  Bell,
+  Tv
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -29,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ companyName }) => {
     { to: '/', label: 'Visão Geral', icon: LayoutDashboard },
     { to: '/usuarios', label: 'Colaboradores', icon: Users },
     { to: '/conteudo', label: 'Quizzes e Conteúdo', icon: BookOpen },
+    { to: '/modo-sala', label: 'Modo Sala', icon: Tv },
     { to: '/analytics', label: 'Analytics & ROI', icon: TrendingUp },
     { to: '/gamificacao', label: 'Gamificação', icon: Award },
     { to: '/notificacoes', label: 'Notificações', icon: Bell },

@@ -1837,6 +1837,940 @@ def atualizar_onboarding_status(usuario_id: str, payload: dict):
     return {"success": True, "db_saved": db_success, "onboarding_completo": onboarding_val}
 
 
+# =========================================================================
+# ENDPOINTS E MODELOS DO MÓDULO MODO SALA (LIVE MULTIPLAYER MULTIJOGADOR)
+# =========================================================================
+
+import random
+import string
+
+class SalaCriarRequest(BaseModel):
+    empresa_id: str
+    criado_por_usuario_id: str
+    tipo: str  # 'gestor' ou 'colaborador'
+    origem_perguntas: str  # 'trilha', 'banco_geral' ou 'personalizada'
+    categoria_id: Optional[str] = None
+
+class SalaEntrarRequest(BaseModel):
+    usuario_id: str
+
+class SalaAdicionarPerguntasRequest(BaseModel):
+    perguntas: Optional[List[PerguntaBulkItem]] = None
+
+class SalaResponderRequest(BaseModel):
+    usuario_id: str
+    pergunta_id: str
+    alternativa_escolhida: str
+    tempo_resposta_ms: int
+
+# In-memory storage for live rooms fallbacks
+MOCK_SALAS_LIVE = {}
+MOCK_SALAS_LIVE_PERGUNTAS = {}
+MOCK_SALAS_LIVE_PARTICIPANTES = {}
+MOCK_SALAS_LIVE_RESPOSTAS = {}
+
+def gerar_codigo_sala() -> str:
+    # Evita caracteres ambíguos: 0, O, 1, I
+    chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(random.choice(chars) for _ in range(6))
+
+@app.post("/api/sala/criar")
+def criar_sala(request: SalaCriarRequest):
+    try:
+        # Tenta gerar um código único
+        codigo = ""
+        for _ in range(20):
+            test_code = gerar_codigo_sala()
+            # Verifica se já existe no Supabase
+            try:
+                check = supabase.table("salas_live").select("id").eq("codigo", test_code).execute()
+                if not check.data:
+                    codigo = test_code
+                    break
+            except Exception as e:
+                if is_missing_table_error(e):
+                    # Se der erro de tabela ausente, usamos mock
+                    codigo_existente = any(s["codigo"] == test_code for s in MOCK_SALAS_LIVE.values())
+                    if not codigo_existente:
+                        codigo = test_code
+                        break
+                else:
+                    raise e
+        else:
+            raise HTTPException(status_code=500, detail="Não foi possível gerar um código de sala exclusivo.")
+
+        sala_id = str(uuid.uuid4())
+        sala_data = {
+            "id": sala_id,
+            "codigo": codigo,
+            "empresa_id": request.empresa_id,
+            "criado_por_usuario_id": request.criado_por_usuario_id,
+            "tipo": request.tipo,
+            "origem_perguntas": request.origem_perguntas,
+            "categoria_id": request.categoria_id,
+            "status": "aguardando",
+            "pergunta_atual_index": 0,
+            "criado_em": datetime.now(timezone.utc).isoformat()
+        }
+
+        try:
+            res = supabase.table("salas_live").insert(sala_data).execute()
+            if res.data:
+                return res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                print(f"[Fallback] salas_live ausente. Criando sala {codigo} em memória.")
+                MOCK_SALAS_LIVE[sala_id] = sala_data
+                return sala_data
+            raise db_err
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao criar sala: {str(e)}")
+
+@app.post("/api/sala/{codigo}/entrar")
+def entrar_sala(codigo: str, request: SalaEntrarRequest):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        # 1. Busca a sala pelo código
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+            else:
+                raise HTTPException(status_code=404, detail="Sala não encontrada.")
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                # Busca na memória
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+                if not sala:
+                    raise HTTPException(status_code=404, detail="Sala não encontrada.")
+            else:
+                raise db_err
+
+        if sala["status"] == "finalizada":
+            raise HTTPException(status_code=400, detail="Esta sala já foi finalizada.")
+
+        participante_id = str(uuid.uuid4())
+        participante_data = {
+            "id": participante_id,
+            "sala_id": sala["id"],
+            "usuario_id": request.usuario_id,
+            "entrou_em": datetime.now(timezone.utc).isoformat(),
+            "pontuacao_total": 0,
+            "posicao_final": None
+        }
+
+        # Busca dados do usuário (nome, foto) para retornar junto
+        user_name = "Participante"
+        user_foto = None
+        try:
+            user_res = supabase.table("usuarios").select("nome, foto_url").eq("id", request.usuario_id).execute()
+            if user_res.data:
+                user_name = user_res.data[0].get("nome", "Participante")
+                user_foto = user_res.data[0].get("foto_url")
+        except Exception:
+            pass
+
+        # Adiciona participante
+        participante_atual = None
+        if not is_mock_fallback:
+            try:
+                # Verifica se já está na sala
+                check = supabase.table("salas_live_participantes").select("*").eq("sala_id", sala["id"]).eq("usuario_id", request.usuario_id).execute()
+                if check.data:
+                    participante_atual = check.data[0]
+                else:
+                    res_p = supabase.table("salas_live_participantes").insert(participante_data).execute()
+                    if res_p.data:
+                        participante_atual = res_p.data[0]
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback:
+            if sala["id"] not in MOCK_SALAS_LIVE_PARTICIPANTES:
+                MOCK_SALAS_LIVE_PARTICIPANTES[sala["id"]] = []
+            
+            # Verifica se já está cadastrado
+            for p in MOCK_SALAS_LIVE_PARTICIPANTES[sala["id"]]:
+                if p["usuario_id"] == request.usuario_id:
+                    participante_atual = p
+                    break
+            else:
+                MOCK_SALAS_LIVE_PARTICIPANTES[sala["id"]].append(participante_data)
+                participante_atual = participante_data
+
+        return {
+            "sala": sala,
+            "participante": participante_atual,
+            "usuario_nome": user_name,
+            "usuario_foto_url": user_foto
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao entrar na sala: {str(e)}")
+
+@app.post("/api/sala/{codigo}/adicionar-perguntas")
+def adicionar_perguntas_sala(codigo: str, request: SalaAdicionarPerguntasRequest):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        # 1. Busca a sala pelo código
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+            else:
+                raise db_err
+                
+        if not sala:
+            raise HTTPException(status_code=404, detail="Sala não encontrada.")
+
+        perguntas_selecionadas = []
+
+        # 2. Determina as perguntas com base na origem
+        if sala["origem_perguntas"] == "personalizada":
+            if not request.perguntas:
+                raise HTTPException(status_code=400, detail="Lista de perguntas personalizadas não fornecida.")
+            for idx, p in enumerate(request.perguntas):
+                perguntas_selecionadas.append({
+                    "id": str(uuid.uuid4()),
+                    "sala_id": sala["id"],
+                    "pergunta_texto": p.texto,
+                    "alternativa_a": p.alternativa_a,
+                    "alternativa_b": p.alternativa_b,
+                    "alternativa_c": p.alternativa_c,
+                    "alternativa_d": p.alternativa_d,
+                    "resposta_correta": p.resposta_correta.upper(),
+                    "ordem": idx + 1,
+                    "tempo_limite_segundos": 30
+                })
+        elif sala["origem_perguntas"] == "trilha":
+            if not sala.get("categoria_id"):
+                raise HTTPException(status_code=400, detail="Categoria ID não configurada para origem trilha.")
+            
+            # Busca perguntas da categoria
+            try:
+                # Busca tópicos da categoria
+                topicos_res = supabase.table("topicos").select("id").eq("categoria_id", sala["categoria_id"]).execute()
+                topicos_ids = [t["id"] for t in topicos_res.data or []]
+                
+                # Desafios
+                desafios_res = supabase.table("desafios").select("id").in_("topico_id", topicos_ids).execute()
+                desafios_ids = [d["id"] for d in desafios_res.data or []]
+                
+                # Perguntas
+                perguntas_res = supabase.table("perguntas").select("*").in_("desafio_id", desafios_ids).execute()
+                db_perguntas = perguntas_res.data or []
+                random.shuffle(db_perguntas)
+                
+                # Se não houver perguntas no banco, lança erro para ir pro fallback
+                if not db_perguntas:
+                    raise Exception("Sem perguntas no banco")
+                    
+                for idx, p in enumerate(db_perguntas[:5]):
+                    perguntas_selecionadas.append({
+                        "id": str(uuid.uuid4()),
+                        "sala_id": sala["id"],
+                        "pergunta_texto": p["texto"],
+                        "alternativa_a": p["alternativa_a"],
+                        "alternativa_b": p["alternativa_b"],
+                        "alternativa_c": p["alternativa_c"],
+                        "alternativa_d": p["alternativa_d"],
+                        "resposta_correta": p["resposta_correta"].upper(),
+                        "ordem": idx + 1,
+                        "tempo_limite_segundos": 30
+                    })
+            except Exception:
+                # Fallback para perguntas mockadas de trilha
+                print("[Fallback] Usando perguntas mockadas para trilha")
+                mock_perguntas = [
+                    {
+                        "pergunta_text": "O que a sigla LGPD significa?",
+                        "a": "Lei Geral de Proteção de Dados",
+                        "b": "Lei de Garantia de Portabilidade de Dados",
+                        "c": "Lei de Gestão e Privacidade de Documentos",
+                        "d": "Licença Geral para Proteção de Dispositivos",
+                        "correta": "A"
+                    },
+                    {
+                        "pergunta_text": "Qual o papel do DPO (Data Protection Officer)?",
+                        "a": "Programar os sistemas de banco de dados",
+                        "b": "Atuar como canal de comunicação entre a empresa, os titulares e a ANPD",
+                        "c": "Auditar as finanças da empresa",
+                        "d": "Garantir a segurança física do prédio corporativo",
+                        "correta": "B"
+                    },
+                    {
+                        "pergunta_text": "Qual das opções abaixo é um dado pessoal sensível segundo a LGPD?",
+                        "a": "Nome completo",
+                        "b": "Endereço de e-mail corporativo",
+                        "c": "Origem racial ou étnica",
+                        "d": "Número de telefone celular",
+                        "correta": "C"
+                    }
+                ]
+                for idx, p in enumerate(mock_perguntas):
+                    perguntas_selecionadas.append({
+                        "id": str(uuid.uuid4()),
+                        "sala_id": sala["id"],
+                        "pergunta_texto": p["pergunta_text"],
+                        "alternativa_a": p["a"],
+                        "alternativa_b": p["b"],
+                        "alternativa_c": p["c"],
+                        "alternativa_d": p["d"],
+                        "resposta_correta": p["correta"],
+                        "ordem": idx + 1,
+                        "tempo_limite_segundos": 30
+                    })
+        else: # banco_geral
+            # Busca perguntas gerais aleatórias
+            try:
+                perguntas_res = supabase.table("perguntas").select("*").limit(50).execute()
+                db_perguntas = perguntas_res.data or []
+                random.shuffle(db_perguntas)
+                if not db_perguntas:
+                    raise Exception("Sem perguntas no banco")
+                for idx, p in enumerate(db_perguntas[:5]):
+                    perguntas_selecionadas.append({
+                        "id": str(uuid.uuid4()),
+                        "sala_id": sala["id"],
+                        "pergunta_texto": p["texto"],
+                        "alternativa_a": p["alternativa_a"],
+                        "alternativa_b": p["alternativa_b"],
+                        "alternativa_c": p["alternativa_c"],
+                        "alternativa_d": p["alternativa_d"],
+                        "resposta_correta": p["resposta_correta"].upper(),
+                        "ordem": idx + 1,
+                        "tempo_limite_segundos": 30
+                    })
+            except Exception:
+                print("[Fallback] Usando perguntas mockadas para banco geral")
+                mock_perguntas = [
+                    {
+                        "pergunta_text": "Qual a melhor prática para criar senhas corporativas?",
+                        "a": "Usar o nome do animal de estimação para lembrar fácil",
+                        "b": "Criar senhas longas com letras, números e caracteres especiais",
+                        "c": "Anotar a senha sob o teclado",
+                        "d": "Compartilhar a mesma senha com a equipe",
+                        "correta": "B"
+                    },
+                    {
+                        "pergunta_text": "O que caracteriza um ataque de Phishing?",
+                        "a": "Uso de e-mails falsos para induzir o usuário a revelar dados",
+                        "b": "Invasão física ao servidor",
+                        "c": "Rede Wi-Fi com sinal lento",
+                        "d": "Pane no sistema elétrico",
+                        "correta": "A"
+                    },
+                    {
+                        "pergunta_text": "O que você deve fazer ao receber um e-mail suspeito pedindo sua senha?",
+                        "a": "Responder informando a senha solicitada",
+                        "b": "Ignorar e não fazer nada",
+                        "c": "Reportar imediatamente para a equipe de Segurança da Informação",
+                        "d": "Encaminhar para todos os seus colegas de trabalho",
+                        "correta": "C"
+                    }
+                ]
+                for idx, p in enumerate(mock_perguntas):
+                    perguntas_selecionadas.append({
+                        "id": str(uuid.uuid4()),
+                        "sala_id": sala["id"],
+                        "pergunta_texto": p["pergunta_text"],
+                        "alternativa_a": p["a"],
+                        "alternativa_b": p["b"],
+                        "alternativa_c": p["c"],
+                        "alternativa_d": p["d"],
+                        "resposta_correta": p["correta"],
+                        "ordem": idx + 1,
+                        "tempo_limite_segundos": 30
+                    })
+
+        # 3. Salva no banco de dados
+        salvo_no_banco = False
+        if not is_mock_fallback:
+            try:
+                # Deleta perguntas anteriores se houver
+                supabase.table("salas_live_perguntas").delete().eq("sala_id", sala["id"]).execute()
+                # Insere novas perguntas
+                res_perg = supabase.table("salas_live_perguntas").insert(perguntas_selecionadas).execute()
+                if res_perg.data:
+                    salvo_no_banco = True
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback or not salvo_no_banco:
+            MOCK_SALAS_LIVE_PERGUNTAS[sala["id"]] = perguntas_selecionadas
+
+        return {
+            "success": True,
+            "sala_id": sala["id"],
+            "perguntas_count": len(perguntas_selecionadas),
+            "perguntas": perguntas_selecionadas
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao adicionar perguntas: {str(e)}")
+
+@app.post("/api/sala/{codigo}/iniciar")
+def iniciar_sala(codigo: str):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+            else:
+                raise db_err
+
+        if not sala:
+            raise HTTPException(status_code=404, detail="Sala não encontrada.")
+
+        now_str = datetime.now(timezone.utc).isoformat()
+        update_data = {
+            "status": "em_andamento",
+            "iniciado_em": now_str,
+            "pergunta_atual_index": 0
+        }
+
+        updated_sala = None
+        if not is_mock_fallback:
+            try:
+                res_up = supabase.table("salas_live").update(update_data).eq("id", sala["id"]).execute()
+                if res_up.data:
+                    updated_sala = res_up.data[0]
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback or not updated_sala:
+            for k, v in update_data.items():
+                sala[k] = v
+            MOCK_SALAS_LIVE[sala["id"]] = sala
+            updated_sala = sala
+
+        return updated_sala
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao iniciar sala: {str(e)}")
+
+@app.post("/api/sala/{codigo}/responder")
+def responder_sala(codigo: str, request: SalaResponderRequest):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+            else:
+                raise db_err
+
+        if not sala:
+            raise HTTPException(status_code=404, detail="Sala não encontrada.")
+
+        # Busca o participante
+        participante = None
+        if not is_mock_fallback:
+            try:
+                part_res = supabase.table("salas_live_participantes").select("*").eq("sala_id", sala["id"]).eq("usuario_id", request.usuario_id).execute()
+                if part_res.data:
+                    participante = part_res.data[0]
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback or not participante:
+            if sala["id"] in MOCK_SALAS_LIVE_PARTICIPANTES:
+                for p in MOCK_SALAS_LIVE_PARTICIPANTES[sala["id"]]:
+                    if p["usuario_id"] == request.usuario_id:
+                        participante = p
+                        break
+
+        if not participante:
+            raise HTTPException(status_code=404, detail="Participante não encontrado nesta sala.")
+
+        # Busca a pergunta
+        pergunta = None
+        if not is_mock_fallback:
+            try:
+                perg_res = supabase.table("salas_live_perguntas").select("*").eq("id", request.pergunta_id).execute()
+                if perg_res.data:
+                    pergunta = perg_res.data[0]
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback or not pergunta:
+            if sala["id"] in MOCK_SALAS_LIVE_PERGUNTAS:
+                for q in MOCK_SALAS_LIVE_PERGUNTAS[sala["id"]]:
+                    if q["id"] == request.pergunta_id:
+                        pergunta = q
+                        break
+
+        if not pergunta:
+            raise HTTPException(status_code=404, detail="Pergunta não encontrada nesta sala.")
+
+        # Verifica acerto
+        correta = request.alternativa_escolhida.upper().strip() == pergunta["resposta_correta"].upper().strip()
+
+        # Calcula pontuação (Kahoot formula)
+        pontos_ganhos = 0
+        if correta:
+            pontos_base = 100
+            tempo_limite_ms = pergunta.get("tempo_limite_segundos", 30) * 1000
+            # Fator velocidade: quanto mais rápido, mais pontos, mínimo 50%
+            tempo_resposta_ms = max(0, min(request.tempo_resposta_ms, tempo_limite_ms))
+            tempo_restante_ms = tempo_limite_ms - tempo_resposta_ms
+            
+            fator_velocidade = 0.5 + 0.5 * (tempo_restante_ms / tempo_limite_ms)
+            pontos_ganhos = int(round(pontos_base * fator_velocidade))
+
+        # Registra resposta
+        resposta_id = str(uuid.uuid4())
+        resposta_data = {
+            "id": resposta_id,
+            "sala_id": sala["id"],
+            "participante_id": participante["id"],
+            "pergunta_id": pergunta["id"],
+            "alternativa_escolhida": request.alternativa_escolhida.upper(),
+            "correta": correta,
+            "tempo_resposta_ms": request.tempo_resposta_ms,
+            "pontos_ganhos": pontos_ganhos
+        }
+
+        # Atualiza a pontuação acumulada do participante
+        nova_pontuacao = participante["pontuacao_total"] + pontos_ganhos
+
+        salvo_no_banco = False
+        if not is_mock_fallback:
+            try:
+                # Grava resposta
+                supabase.table("salas_live_respostas").insert(resposta_data).execute()
+                # Atualiza participante
+                supabase.table("salas_live_participantes").update({"pontuacao_total": nova_pontuacao}).eq("id", participante["id"]).execute()
+                salvo_no_banco = True
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback or not salvo_no_banco:
+            # Salva na memória
+            if sala["id"] not in MOCK_SALAS_LIVE_RESPOSTAS:
+                MOCK_SALAS_LIVE_RESPOSTAS[sala["id"]] = []
+            
+            # Remove resposta anterior se houver duplicidade
+            MOCK_SALAS_LIVE_RESPOSTAS[sala["id"]] = [r for r in MOCK_SALAS_LIVE_RESPOSTAS[sala["id"]] if not (r["participante_id"] == participante["id"] and r["pergunta_id"] == pergunta["id"])]
+            MOCK_SALAS_LIVE_RESPOSTAS[sala["id"]].append(resposta_data)
+            
+            # Atualiza participante em memória
+            participante["pontuacao_total"] = nova_pontuacao
+
+        return {
+            "correta": correta,
+            "resposta_correta": pergunta["resposta_correta"],
+            "pontos_ganhos": pontos_ganhos,
+            "pontuacao_total": nova_pontuacao
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao registrar resposta: {str(e)}")
+
+@app.post("/api/sala/{codigo}/proxima-pergunta")
+def proxima_pergunta_sala(codigo: str):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+            else:
+                raise db_err
+
+        if not sala:
+            raise HTTPException(status_code=404, detail="Sala não encontrada.")
+
+        novo_index = sala["pergunta_atual_index"] + 1
+        update_data = {
+            "pergunta_atual_index": novo_index
+        }
+
+        updated_sala = None
+        if not is_mock_fallback:
+            try:
+                res_up = supabase.table("salas_live").update(update_data).eq("id", sala["id"]).execute()
+                if res_up.data:
+                    updated_sala = res_up.data[0]
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback or not updated_sala:
+            sala["pergunta_atual_index"] = novo_index
+            MOCK_SALAS_LIVE[sala["id"]] = sala
+            updated_sala = sala
+
+        return updated_sala
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao avançar pergunta: {str(e)}")
+
+@app.post("/api/sala/{codigo}/finalizar")
+def finalizar_sala(codigo: str):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+            else:
+                raise db_err
+
+        if not sala:
+            raise HTTPException(status_code=404, detail="Sala não encontrada.")
+
+        now_str = datetime.now(timezone.utc).isoformat()
+        
+        # 1. Busca todos os participantes e ordena por pontuação
+        participantes = []
+        if not is_mock_fallback:
+            try:
+                part_res = supabase.table("salas_live_participantes").select("*").eq("sala_id", sala["id"]).order("pontuacao_total", desc=True).execute()
+                participantes = part_res.data or []
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback:
+            participantes = list(MOCK_SALAS_LIVE_PARTICIPANTES.get(sala["id"], []))
+            participantes.sort(key=lambda x: x["pontuacao_total"], reverse=True)
+
+        # 2. Atualiza a posição final dos participantes e atribui XP proporcional
+        for posicao, p in enumerate(participantes):
+            posicao_final = posicao + 1
+            p["posicao_final"] = posicao_final
+            
+            # Atualiza participante no banco ou em memória
+            if not is_mock_fallback:
+                try:
+                    supabase.table("salas_live_participantes").update({"posicao_final": posicao_final}).eq("id", p["id"]).execute()
+                except Exception:
+                    pass
+            
+            # Credita XP proporcional (XP normal do sistema)
+            xp_ganho = max(10, p["pontuacao_total"] // 10)
+            
+            try:
+                pont_res = supabase.table("pontuacoes").select("*").eq("usuario_id", p["usuario_id"]).execute()
+                if pont_res.data:
+                    pont = pont_res.data[0]
+                    update_xp_data = {
+                        "xp_total": pont["xp_total"] + xp_ganho,
+                        "nivel": ((pont["xp_total"] + xp_ganho) // 500) + 1
+                    }
+                    supabase.table("pontuacoes").update(update_xp_data).eq("usuario_id", p["usuario_id"]).execute()
+                else:
+                    insert_xp_data = {
+                        "usuario_id": p["usuario_id"],
+                        "xp_total": xp_ganho,
+                        "nivel": 1,
+                        "streak_atual": 0,
+                        "streak_maximo": 0
+                    }
+                    supabase.table("pontuacoes").insert(insert_xp_data).execute()
+            except Exception as xp_err:
+                print(f"Erro ao creditar XP para usuário {p['usuario_id']}: {xp_err}")
+
+        # 3. Finaliza a sala
+        update_sala_data = {
+            "status": "finalizada",
+            "finalizado_em": now_str
+        }
+
+        updated_sala = None
+        if not is_mock_fallback:
+            try:
+                res_up = supabase.table("salas_live").update(update_sala_data).eq("id", sala["id"]).execute()
+                if res_up.data:
+                    updated_sala = res_up.data[0]
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback or not updated_sala:
+            sala["status"] = "finalizada"
+            sala["finalizado_em"] = now_str
+            MOCK_SALAS_LIVE[sala["id"]] = sala
+            updated_sala = sala
+
+        return {
+            "sala": updated_sala,
+            "participantes": participantes
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao finalizar sala: {str(e)}")
+
+@app.get("/api/sala/{codigo}/ranking")
+def obter_ranking_sala(codigo: str):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+            else:
+                raise db_err
+
+        if not sala:
+            raise HTTPException(status_code=404, detail="Sala não encontrada.")
+
+        # Busca todos os participantes
+        participantes = []
+        if not is_mock_fallback:
+            try:
+                part_res = supabase.table("salas_live_participantes").select("*").eq("sala_id", sala["id"]).order("pontuacao_total", desc=True).execute()
+                participantes = part_res.data or []
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+
+        if is_mock_fallback:
+            participantes = list(MOCK_SALAS_LIVE_PARTICIPANTES.get(sala["id"], []))
+            participantes.sort(key=lambda x: x["pontuacao_total"], reverse=True)
+
+        ranking_completo = []
+        for p in participantes:
+            user_nome = "Colaborador"
+            user_foto = None
+            try:
+                user_res = supabase.table("usuarios").select("nome, foto_url").eq("id", p["usuario_id"]).execute()
+                if user_res.data:
+                    user_nome = user_res.data[0].get("nome", "Colaborador")
+                    user_foto = user_res.data[0].get("foto_url")
+            except Exception:
+                pass
+            
+            ranking_completo.append({
+                "usuario_id": p["usuario_id"],
+                "nome": user_nome,
+                "foto_url": user_foto,
+                "pontuacao_total": p["pontuacao_total"],
+                "posicao_final": p.get("posicao_final")
+            })
+
+        return ranking_completo
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar ranking: {str(e)}")
+
+@app.get("/api/sala/{codigo}/estatisticas")
+def obter_estatisticas_sala(codigo: str):
+    codigo_clean = codigo.upper().strip()
+    try:
+        sala = None
+        is_mock_fallback = False
+        
+        try:
+            res = supabase.table("salas_live").select("*").eq("codigo", codigo_clean).execute()
+            if res.data:
+                sala = res.data[0]
+        except Exception as db_err:
+            if is_missing_table_error(db_err):
+                is_mock_fallback = True
+                for s in MOCK_SALAS_LIVE.values():
+                    if s["codigo"] == codigo_clean:
+                        sala = s
+                        break
+            else:
+                raise db_err
+
+        if not sala:
+            raise HTTPException(status_code=404, detail="Sala não encontrada.")
+
+        # Busca perguntas
+        perguntas = []
+        if not is_mock_fallback:
+            try:
+                perg_res = supabase.table("salas_live_perguntas").select("*").eq("sala_id", sala["id"]).order("ordem").execute()
+                perguntas = perg_res.data or []
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+        if is_mock_fallback:
+            perguntas = list(MOCK_SALAS_LIVE_PERGUNTAS.get(sala["id"], []))
+            perguntas.sort(key=lambda x: x["ordem"])
+
+        # Busca respostas
+        respostas = []
+        if not is_mock_fallback:
+            try:
+                resp_res = supabase.table("salas_live_respostas").select("*").eq("sala_id", sala["id"]).execute()
+                respostas = resp_res.data or []
+            except Exception as db_err:
+                if is_missing_table_error(db_err):
+                    is_mock_fallback = True
+                else:
+                    raise db_err
+        if is_mock_fallback:
+            respostas = list(MOCK_SALAS_LIVE_RESPOSTAS.get(sala["id"], []))
+
+        stats = []
+        for q in perguntas:
+            q_respostas = [r for r in respostas if r["pergunta_id"] == q["id"]]
+            total_respostas = len(q_respostas)
+            corretas = len([r for r in q_respostas if r["correta"]])
+            
+            taxa_acerto = (corretas / total_respostas * 100) if total_respostas > 0 else 0
+            
+            # Conta por alternativa
+            conta_a = len([r for r in q_respostas if r["alternativa_escolhida"] == "A"])
+            conta_b = len([r for r in q_respostas if r["alternativa_escolhida"] == "B"])
+            conta_c = len([r for r in q_respostas if r["alternativa_escolhida"] == "C"])
+            conta_d = len([r for r in q_respostas if r["alternativa_escolhida"] == "D"])
+
+            stats.append({
+                "pergunta_id": q["id"],
+                "pergunta_texto": q["pergunta_texto"],
+                "total_respostas": total_respostas,
+                "corretas": corretas,
+                "taxa_acerto": round(taxa_acerto, 1),
+                "respostas_por_alternativa": {
+                    "A": conta_a,
+                    "B": conta_b,
+                    "C": conta_c,
+                    "D": conta_d
+                }
+            })
+
+        return stats
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar estatísticas: {str(e)}")
+
+
 # Startup Event para iniciar o Scheduler
 @app.on_event("startup")
 async def startup_event():

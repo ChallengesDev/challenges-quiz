@@ -5,12 +5,14 @@ import 'providers/auth_provider.dart';
 import 'providers/quiz_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/notifications_provider.dart';
+import 'providers/live_room_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'screens/result_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/lightning_challenge_screen.dart';
+import 'screens/live_room_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +41,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => QuizProvider()),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
         ChangeNotifierProvider(create: (_) => NotificationsProvider()),
+        ChangeNotifierProvider(create: (_) => LiveRoomProvider()),
       ],
       child: MaterialApp(
         title: 'Challenges Quiz',
@@ -90,6 +93,7 @@ class MyApp extends StatelessWidget {
           '/result': (context) => const ResultScreen(),
           '/notifications': (context) => const NotificationsScreen(),
           '/lightning_challenge': (context) => const LightningChallengeScreen(),
+          '/live_room': (context) => const LiveRoomScreen(),
         },
       ),
     );
